@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <io.h>
 
 #ifdef AMIGA
 #pragma amiga-align
@@ -128,11 +129,10 @@ int linklen=10,flags=0;
 #if defined(_WIN32)||defined(MSDOS)
 char *tmpnam(char *p)
 {
-  static int c=1675;
   static char tmp[32];
   if(!p) p=tmp;
-  sprintf(p,"%s\\vbcc%04x",getenv("TEMP"),++c);
-  return p;
+  sprintf(p,"%s\\vbccXXXX",getenv("TEMP"));
+  return mktemp(p);
 }
 #endif
 
