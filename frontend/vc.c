@@ -5,7 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+#ifdef _WIN32
 #include <io.h>
+#endif
 
 #ifdef AMIGA
 #pragma amiga-align
