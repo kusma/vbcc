@@ -167,14 +167,14 @@ void free_namelist(struct NameList *p)
 }
 void fatal(const char *msg)
 {
-    puts(msg);
+    fputs(msg, stderr);
     raus(EXIT_FAILURE);
 }
 void fatalf(const char *fmt, ...)
 {
     va_list va;
     va_start(va, fmt);
-    vprintf(fmt, va);
+    vfprintf(stderr, fmt, va);
     va_end(va);
     raus(EXIT_FAILURE);
 }
