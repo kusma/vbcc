@@ -6,16 +6,20 @@ MKDIR = mkdir -p
 RM = rm -f
 INSTALL = install
 
+ifdef COMSPEC
+X = .exe
+endif
+
 # native version; used to create dtgen
 NCC = $(CC)
 NLDFLAGS = $(LDFLAGS)
 
-all: bin bin/vc bin/vprof bin/vbcc$(TARGET) #bin/vcpp
+all: bin bin/vc$X bin/vprof$X bin/vbcc$(TARGET)$X #bin/vcpp$X
 
 install: all doc/vbcc.pdf
-	$(INSTALL) -D bin/vc $(DESTDIR)/bin/vc
-	$(INSTALL) -D bin/vprof $(DESTDIR)/bin/vprof
-	$(INSTALL) -D bin/vbcc$(TARGET) $(DESTDIR)/bin/vbcc$(TARGET)
+	$(INSTALL) -D bin/vc$X $(DESTDIR)/bin/vc$X
+	$(INSTALL) -D bin/vprof$X $(DESTDIR)/bin/vprof$X
+	$(INSTALL) -D bin/vbcc$(TARGET)$X $(DESTDIR)/bin/vbcc$(TARGET)$X
 	$(INSTALL) -D doc/vbcc.pdf $(DESTDIR)/share/doc/vbcc/vbcc.pdf
 
 bin:
@@ -26,10 +30,10 @@ clean:
 
 vbccs: bin/vbccs$(TARGET)
 
-bin/vc: frontend/vc.c
+bin/vc$X: frontend/vc.c
 	$(CC) frontend/vc.c -o $@ $(LDFLAGS)
 
-bin/vprof: vprof/vprof.c
+bin/vprof$X: vprof/vprof.c
 	$(CC) vprof/vprof.c -o $@ $(LDFLAGS)
 
 doc/vbcc.pdf:
@@ -45,10 +49,10 @@ vcppobjs = vcpp/cpp.o vcpp/eval.o vcpp/getopt.o vcpp/hideset.o vcpp/include.o \
 vbcc.tar.gz:
 	(cd ..;tar zcvf vbcc.tar.gz vbcc/Makefile vbcc/*.[ch] vbcc/datatypes/*.[ch] vbcc/doc/*.texi vbcc/frontend/vc.c vbcc/machines/*/machine.[ch] vbcc/machines/*/machine.dt vbcc/machines/*/schedule.[ch] vbcc/ucpp/*.[ch] vbcc/ucpp/README vbcc/vprof/vprof.c vbcc/vsc/vsc.[ch])
 
-bin/osekrm: osekrm.c
+bin/osekrm$X: osekrm.c
 	$(CC) osekrm.c -o $@
 
-dist: bin/osekrm
+dist: bin/osekrm$X
 	mv supp.h t1
 	mv supp.c t2
 	mv main.c t3
@@ -60,17 +64,17 @@ dist: bin/osekrm
 	mv statements.c t9
 	mv rd.c t10
 	mv type_expr.c t11
-	bin/osekrm <t1 >supp.h
-	bin/osekrm <t2 >supp.c
-	bin/osekrm <t3 >main.c
-	bin/osekrm <t4 >machines/ppc/machine.c
-	bin/osekrm <t5 >declaration.c
-	bin/osekrm <t6 >flow.c
-	bin/osekrm <t7 >ic.c
-	bin/osekrm <t8 >parse_expr.c
-	bin/osekrm <t9 >statements.c
-	bin/osekrm <t10 >rd.c
-	bin/osekrm <t11 >type_expr.c
+	bin/osekrm$X <t1 >supp.h
+	bin/osekrm$X <t2 >supp.c
+	bin/osekrm$X <t3 >main.c
+	bin/osekrm$X <t4 >machines/ppc/machine.c
+	bin/osekrm$X <t5 >declaration.c
+	bin/osekrm$X <t6 >flow.c
+	bin/osekrm$X <t7 >ic.c
+	bin/osekrm$X <t8 >parse_expr.c
+	bin/osekrm$X <t9 >statements.c
+	bin/osekrm$X <t10 >rd.c
+	bin/osekrm$X <t11 >type_expr.c
 	make vbcc.tar.gz
 	mv t1 supp.h
 	mv t2 supp.c
@@ -84,7 +88,7 @@ dist: bin/osekrm
 	mv t10 rd.c
 	mv t11 type_expr.c	
 
-bin/vcpp: $(vcppobjs)
+bin/vcpp$X: $(vcppobjs)
 	$(CC) $(LDFLAGS) $(vcppobjs) -o $@
 
 vcpp/cpp.o: vcpp/cpp.c vcpp/cpp.h
@@ -153,32 +157,32 @@ minicomp	 = $(TRGDIR)/supp.o $(TRGDIR)/minicompg.tab.o $(TRGDIR)/minicomp.o $(TR
 
 vscobjects = $(TRGDIR)/vsc.o $(TRGDIR)/schedule.o
 
-bin/vbcc$(TARGET): $(fobjects)
+bin/vbcc$(TARGET)$X: $(fobjects)
 	$(CC) $(LDFLAGS) $(fobjects) -o $@
 
-bin/vbccs$(TARGET): $(sobjects)
+bin/vbccs$(TARGET)$X: $(sobjects)
 	$(CC) $(LDFLAGS) $(sobjects) -o $@
 
-bin/vsc$(TARGET): $(vscobjects)
+bin/vsc$(TARGET)$X: $(vscobjects)
 	$(CC) $(LDFLAGS) $(vscobjects) -o $@
 
-bin/tasm$(TARGET): $(tasm)
+bin/tasm$(TARGET)$X: $(tasm)
 	$(CC) $(LDFLAGS) $(tasm) -o $@
 
-bin/mbasic$(TARGET): $(mbasic)
+bin/mbasic$(TARGET)$X: $(mbasic)
 	$(CC) $(LDFLAGS) $(mbasic) -o $@
 
-bin/minicomp$(TARGET): $(minicomp)
+bin/minicomp$(TARGET)$X: $(minicomp)
 	$(CC) $(LDFLAGS) $(minicomp) -o $@
 
-bin/dtgen: datatypes/dtgen.c datatypes/datatypes.h datatypes/dtconv.h
+bin/dtgen$X: datatypes/dtgen.c datatypes/datatypes.h datatypes/dtconv.h
 	$(NCC) datatypes/dtgen.c -o $@ -Idatatypes $(NLDFLAGS)
 
-$(TRGDIR)/dt.h: bin/dtgen $(TRGDIR)/machine.dt
-	bin/dtgen $(TRGDIR)/machine.dt $(TRGDIR)/dt.h $(TRGDIR)/dt.c
+$(TRGDIR)/dt.h: bin/dtgen$X $(TRGDIR)/machine.dt
+	bin/dtgen$X $(TRGDIR)/machine.dt $(TRGDIR)/dt.h $(TRGDIR)/dt.c
 
-$(TRGDIR)/dt.c: bin/dtgen $(TRGDIR)/machine.dt
-	bin/dtgen $(TRGDIR)/machine.dt $(TRGDIR)/dt.h $(TRGDIR)/dt.c
+$(TRGDIR)/dt.c: bin/dtgen$X $(TRGDIR)/machine.dt
+	bin/dtgen$X $(TRGDIR)/machine.dt $(TRGDIR)/dt.h $(TRGDIR)/dt.c
 
 $(TRGDIR)/dt.o: $(TRGDIR)/dt.h $(TRGDIR)/dt.c
 	$(CC) -c $(TRGDIR)/dt.c -o $@ -I$(TRGDIR) -Idatatypes
