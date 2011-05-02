@@ -2,12 +2,16 @@
 # used to create vbcc, vc and vcpp
 CC = gcc -g -DHAVE_AOS4 #-DHAVE_ECPP -DHAVE_MISRA 
 LDFLAGS = -lm
+MKDIR = mkdir -p
 
 # native version; used to create dtgen
 NCC = $(CC)
 NLDFLAGS = $(LDFLAGS)
 
-all: bin/vc bin/vprof bin/vbcc$(TARGET) #bin/vcpp
+all: bin bin/vc bin/vprof bin/vbcc$(TARGET) #bin/vcpp
+
+bin:
+	$(MKDIR) bin
 
 vbccs: bin/vbccs$(TARGET)
 
