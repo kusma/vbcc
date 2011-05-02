@@ -5,7 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+#ifdef _WIN32
 #include <io.h>
+#endif
 
 #ifdef AMIGA
 #pragma amiga-align
@@ -127,12 +130,22 @@ struct AnchorPath *ap;
 int linklen=10,flags=0;
 
 #if defined(_WIN32)||defined(MSDOS)
-char *tmpnam(char *p)
+char *local_tmpnam(char *p)
 {
   static char tmp[32];
   if(!p) p=tmp;
   sprintf(p,"%s\\vbccXXXX",getenv("TEMP"));
   return mktemp(p);
+}
+#else
+char *local_tmpnam(char *p)
+{
+  static int counter = 0;
+  static char buffer[256];
+  sprintf(buffer,"/tmp/vbcc.%u.%u", getpid(), counter++);
+  if (p)
+	  strcpy(p, buffer);
+  return buffer;
 }
 #endif
 
@@ -467,7 +480,7 @@ int main(int argc,char *argv[])
                 strcpy(cmname,file);
               }else{
                 cmname[0]='\"';
-                tmpnam(cmname+1);
+                local_tmpnam(cmname+1);
               }
             }
             for(j=t;j<tfl;j++){
@@ -479,7 +492,7 @@ int main(int argc,char *argv[])
                 }else{
                   if(j==t&&j!=tfl-1&&!(flags&(NOTMPFILE|KEEPSCRATCH))){
                     file=namebuf2;
-                    tmpnam(file+1);
+                    local_tmpnam(file+1);
                   }
                   if(j==tfl-1||(flags&WPO)) file=namebuf;
                 }
@@ -515,7 +528,7 @@ int main(int argc,char *argv[])
 #ifdef USECMDFILE
                         if(!cmdfile){
                           char *s;
-                          s=tmpnam(0);
+                          s=local_tmpnam(0);
                           cmfiles=malloc(strlen(s)+16);
                           if(!cmfiles){printf(nomem);exit(EXIT_FAILURE);}
                           sprintf(cmfiles,"-cmd= \"%s\"",s);
@@ -584,7 +597,7 @@ int main(int argc,char *argv[])
         if(!(linkcmd=malloc(linklen))){printf(nomem);raus(EXIT_FAILURE);}
         p=first_obj;
         if(linklen>=MAXCLEN){
-            tfname=tmpnam(0);
+            tfname=local_tmpnam(0);
             sprintf(objects,cf,tfname);
             if(!(objfile=fopen(tfname,"w"))){
                 printf("Could not open <%s>!\n",tfname);
