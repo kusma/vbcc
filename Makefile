@@ -18,7 +18,7 @@ bin/vprof: vprof/vprof.c
 	$(CC) vprof/vprof.c -o bin/vprof $(LDFLAGS)
 
 doc/vbcc.pdf:
-	texi2dvi --pdf doc/vbcc.texi
+	(cd doc; texi2dvi --pdf vbcc.texi)
 
 doc/vbcc.html:
 	(cd doc;texi2html -split=chapter -nosec_nav -frames vbcc.texi)
