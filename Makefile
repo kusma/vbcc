@@ -3,12 +3,19 @@
 CC = gcc -g -DHAVE_AOS4 #-DHAVE_ECPP -DHAVE_MISRA 
 LDFLAGS = -lm
 MKDIR = mkdir -p
+INSTALL = install
 
 # native version; used to create dtgen
 NCC = $(CC)
 NLDFLAGS = $(LDFLAGS)
 
 all: bin bin/vc bin/vprof bin/vbcc$(TARGET) #bin/vcpp
+
+install: all doc/vbcc.pdf
+	$(INSTALL) -D bin/vc $(DESTDIR)/bin/vc
+	$(INSTALL) -D bin/vprof $(DESTDIR)/bin/vprof
+	$(INSTALL) -D bin/vbcc$(TARGET) $(DESTDIR)/bin/vbcc$(TARGET)
+	$(INSTALL) -D doc/vbcc.pdf $(DESTDIR)/share/doc/vbcc/vbcc.pdf
 
 bin:
 	$(MKDIR) bin
