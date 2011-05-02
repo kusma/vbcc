@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -164,12 +165,25 @@ void free_namelist(struct NameList *p)
         p=m;
     }
 }
+void fatal(const char *msg)
+{
+    puts(msg);
+    raus(EXIT_FAILURE);
+}
+void fatalf(const char *fmt, ...)
+{
+    va_list va;
+    va_start(va, fmt);
+    vprintf(fmt, va);
+    va_end(va);
+    raus(EXIT_FAILURE);
+}
 void del_scratch(struct NameList *p)
 {
     while(p){
         sprintf(command,rmname,p->obj);
         if(flags&VERBOSE) printf("%s\n",command);
-        if(system(command)){printf("%s failed\n",command);raus(EXIT_FAILURE);}
+        if(system(command)) fatalf("%s failed\n",command);
         p=p->next;
     }
 }
@@ -200,9 +214,9 @@ void add_name(char *obj,struct NameList **first,struct NameList **last)
     struct NameList *new;
     if(flags&VERYVERBOSE) printf("add_name: %s\n",obj);
     if(!(new=malloc(sizeof(struct NameList))))
-        {puts(nomem);raus(EXIT_FAILURE);}
+        {fatal(nomem);}
     if(!(new->obj=malloc(strlen(obj)+1)))
-        {free((void *)new);puts(nomem);raus(EXIT_FAILURE);}
+        {free((void *)new);fatal(nomem);}
     if(first==&first_obj) linklen+=strlen(obj)+1;
     strcpy(new->obj,obj);
     new->next=0;
@@ -219,7 +233,7 @@ int read_config(const char *cfg_name)
     FILE *file=0;
     for(i=0;i<sizeof(search_dirs)/sizeof(search_dirs[0]);i++){
       name=malloc(strlen(search_dirs[i])+strlen(cfg_name)+1);
-      if(!name) {puts(nomem);raus(EXIT_FAILURE);}
+      if(!name) {fatal(nomem);}
       strcpy(name,search_dirs[i]);
       strcat(name,cfg_name);
       file=fopen(name,"r");
@@ -230,7 +244,7 @@ int read_config(const char *cfg_name)
       p=getenv("VBCC");
       if(p){
         name=malloc(strlen(p)+strlen(cfg_name)+20);
-        if(!name){puts(nomem);raus(EXIT_FAILURE);}
+        if(!name){fatal(nomem);}
         strcpy(name,p);
 #if defined(_WIN32)||defined(MSDOS)
         strcat(name,"\\config\\");
@@ -246,12 +260,12 @@ int read_config(const char *cfg_name)
         free(name);
       }
     }
-    if(!file) {puts("No config file!");raus(EXIT_FAILURE);}
+    if(!file) {fatal("No config file!");}
     if(fseek(file,0,SEEK_END)) return 0;
     size=ftell(file);
     if(fseek(file,0,SEEK_SET)) return 0;
     config=malloc(size+1);
-    if(!config){puts(nomem);raus(EXIT_FAILURE);}
+    if(!config){fatal(nomem);}
     size=fread(config,1,size,file);
     fclose(file);
     count=0;p=config;
@@ -416,10 +430,10 @@ int main(int argc,char *argv[])
     /*  Nummer sicher...    */
     len+=strlen(ppname)+strlen(ccname)+strlen(asname)+
          strlen(rmname)+strlen(scname)+strlen(userlibs)+NAMEBUF+100;
-    if(!(command=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
-    if(!(oldfile=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
-    if(!(options=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
-    if(!(ppopts=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
+    if(!(command=malloc(len))){fatal(nomem);}
+    if(!(oldfile=malloc(len))){fatal(nomem);}
+    if(!(options=malloc(len))){fatal(nomem);}
+    if(!(ppopts=malloc(len))){fatal(nomem);}
     *options=0;*ppopts=0;
     for(i=1;i<argc+count;i++){
         if(i<argc) parm=argv[i]; else parm=confp[i-argc];
@@ -576,7 +590,7 @@ int main(int argc,char *argv[])
                     if((tfl)!=OBJ) add_name(file,&first_scratch,&last_scratch);
                 }
                 if(flags&VERBOSE) printf("%s\n",command);
-                if(system(command)){printf("%s failed\n",command);raus(EXIT_FAILURE);}
+                if(system(command)){fatalf("%s failed\n",command);}
             }
 #ifdef AMIGA
         }while(pm&&!MatchNext(ap));
@@ -591,18 +605,15 @@ int main(int argc,char *argv[])
         FILE *objfile=0;
         char *tfname;
         objects=malloc(linklen);
-        if(!objects){puts(nomem);raus(EXIT_FAILURE);}
+        if(!objects){fatal(nomem);}
         linklen+=strlen(ldname)+strlen(destname)+strlen(userlibs)+10;
         if(flags&VERYVERBOSE) printf("linklen=%d\n",linklen);
-        if(!(linkcmd=malloc(linklen))){puts(nomem);raus(EXIT_FAILURE);}
+        if(!(linkcmd=malloc(linklen))){fatal(nomem);}
         p=first_obj;
         if(linklen>=MAXCLEN){
             tfname=local_tmpnam(0);
             sprintf(objects,cf,tfname);
-            if(!(objfile=fopen(tfname,"w"))){
-                printf("Could not open <%s>!\n",tfname);
-                raus(EXIT_FAILURE);
-            }
+            if(!(objfile=fopen(tfname,"w"))) fatalf("Could not open <%s>!\n",tfname);
         }else *objects=0;
         while(p){
             if(p->obj){
@@ -620,7 +631,7 @@ int main(int argc,char *argv[])
             sprintf(linkcmd,ldname,objects,userlibs,destname);
             if(flags&VERBOSE) printf("%s\n",linkcmd);
             /*  hier wird objfile bei Fehler nicht geloescht    */
-            if(system(linkcmd)){printf("%s failed\n",linkcmd);raus(EXIT_FAILURE);}
+            if(system(linkcmd)) fatalf("%s failed\n",linkcmd);
 #ifdef AMIGA
             if(flags&VERBOSE){
                 BPTR l;
@@ -661,7 +672,7 @@ int typ(char *fp)
 char *add_suffix(char *s,char *suffix)
 {
     static char str[NAMEBUF+3],*p;
-    if(strlen(s)+strlen(suffix)>NAMEBUF){printf("string too long\n");raus(EXIT_FAILURE);}
+    if(strlen(s)+strlen(suffix)>NAMEBUF){fatal("string too long\n");}
     if(s!=str) strcpy(str,s);
     p=strrchr(str,'.');
     if(!p) p=str+strlen(s);
