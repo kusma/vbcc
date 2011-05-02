@@ -3,6 +3,7 @@
 CC = gcc -g -DHAVE_AOS4 #-DHAVE_ECPP -DHAVE_MISRA 
 LDFLAGS = -lm
 MKDIR = mkdir -p
+RM = rm -f
 INSTALL = install
 
 # native version; used to create dtgen
@@ -19,6 +20,9 @@ install: all doc/vbcc.pdf
 
 bin:
 	$(MKDIR) bin
+
+clean:
+	$(RM) bin/* $(vcppobjs) $(bobjects) $(fobjects) $(sobjects) $(tasm) $(mbasic) $(minicomp) $(vscobjects)
 
 vbccs: bin/vbccs$(TARGET)
 
