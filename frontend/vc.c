@@ -183,7 +183,7 @@ void del_scratch(struct NameList *p)
     while(p){
         sprintf(command,rmname,p->obj);
         if(flags&VERBOSE) printf("%s\n",command);
-        if(system(command)) fatalf("%s failed\n",command);
+        if(system(command)) fatalf("%s failed: %s\n",command,strerror(errno));
         p=p->next;
     }
 }
@@ -590,7 +590,7 @@ int main(int argc,char *argv[])
                     if((tfl)!=OBJ) add_name(file,&first_scratch,&last_scratch);
                 }
                 if(flags&VERBOSE) printf("%s\n",command);
-                if(system(command)){fatalf("%s failed\n",command);}
+                if(system(command)){fatalf("%s failed: %s\n",command,strerror(errno));}
             }
 #ifdef AMIGA
         }while(pm&&!MatchNext(ap));
@@ -631,7 +631,7 @@ int main(int argc,char *argv[])
             sprintf(linkcmd,ldname,objects,userlibs,destname);
             if(flags&VERBOSE) printf("%s\n",linkcmd);
             /*  hier wird objfile bei Fehler nicht geloescht    */
-            if(system(linkcmd)) fatalf("%s failed\n",linkcmd);
+            if(system(linkcmd)) fatalf("%s failed: %s\n",linkcmd,strerror(errno));
 #ifdef AMIGA
             if(flags&VERBOSE){
                 BPTR l;
