@@ -6,6 +6,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef _WIN32
+#include <io.h>
+#endif
+
 #ifdef AMIGA
 #pragma amiga-align
 #ifdef __amigaos4__
