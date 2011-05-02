@@ -969,7 +969,7 @@ static void function_bottom(FILE *f,struct Var *v,long offset)
       if(!v->fi) v->fi=new_fi();
       v->fi->flags|=ALL_STACK;
       v->fi->stack1=l2zm(size+loff+stack);
-      emit(f,"%c stacksize=%ld\n",GAS?'#':';',size+loff+stack);
+      emit(f,"%c stacksize=%ld\n",';',size+loff+stack);
     }
 }
 static void move(FILE *f,struct obj *q,int qreg,struct obj *z,int zreg,int t)

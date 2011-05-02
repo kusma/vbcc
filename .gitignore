@@ -1,0 +1,14 @@
+*.o
+bin/
+doc/*.html
+doc/vbcc.aux
+doc/vbcc.cp
+doc/vbcc.fn
+doc/vbcc.ky
+doc/vbcc.log
+doc/vbcc.pdf
+doc/vbcc.pg
+doc/vbcc.toc
+doc/vbcc.tp
+doc/vbcc.vr
+machines/*/dt.[ch]
