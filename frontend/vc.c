@@ -186,9 +186,9 @@ void add_name(char *obj,struct NameList **first,struct NameList **last)
     struct NameList *new;
     if(flags&VERYVERBOSE) printf("add_name: %s\n",obj);
     if(!(new=malloc(sizeof(struct NameList))))
-        {printf(nomem);raus(EXIT_FAILURE);}
+        {puts(nomem);raus(EXIT_FAILURE);}
     if(!(new->obj=malloc(strlen(obj)+1)))
-        {free((void *)new);printf(nomem);raus(EXIT_FAILURE);}
+        {free((void *)new);puts(nomem);raus(EXIT_FAILURE);}
     if(first==&first_obj) linklen+=strlen(obj)+1;
     strcpy(new->obj,obj);
     new->next=0;
@@ -205,7 +205,7 @@ int read_config(const char *cfg_name)
     FILE *file=0;
     for(i=0;i<sizeof(search_dirs)/sizeof(search_dirs[0]);i++){
       name=malloc(strlen(search_dirs[i])+strlen(cfg_name)+1);
-      if(!name) {printf(nomem);raus(EXIT_FAILURE);}
+      if(!name) {puts(nomem);raus(EXIT_FAILURE);}
       strcpy(name,search_dirs[i]);
       strcat(name,cfg_name);
       file=fopen(name,"r");
@@ -216,7 +216,7 @@ int read_config(const char *cfg_name)
       p=getenv("VBCC");
       if(p){
         name=malloc(strlen(p)+strlen(cfg_name)+20);
-        if(!name){printf(nomem);raus(EXIT_FAILURE);}
+        if(!name){puts(nomem);raus(EXIT_FAILURE);}
         strcpy(name,p);
 #if defined(_WIN32)||defined(MSDOS)
         strcat(name,"\\config\\");
@@ -237,7 +237,7 @@ int read_config(const char *cfg_name)
     size=ftell(file);
     if(fseek(file,0,SEEK_SET)) return 0;
     config=malloc(size+1);
-    if(!config){printf(nomem);raus(EXIT_FAILURE);}
+    if(!config){puts(nomem);raus(EXIT_FAILURE);}
     size=fread(config,1,size,file);
     fclose(file);
     count=0;p=config;
@@ -402,10 +402,10 @@ int main(int argc,char *argv[])
     /*  Nummer sicher...    */
     len+=strlen(ppname)+strlen(ccname)+strlen(asname)+
          strlen(rmname)+strlen(scname)+strlen(userlibs)+NAMEBUF+100;
-    if(!(command=malloc(len))){printf(nomem);raus(EXIT_FAILURE);}
-    if(!(oldfile=malloc(len))){printf(nomem);raus(EXIT_FAILURE);}
-    if(!(options=malloc(len))){printf(nomem);raus(EXIT_FAILURE);}
-    if(!(ppopts=malloc(len))){printf(nomem);raus(EXIT_FAILURE);}
+    if(!(command=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
+    if(!(oldfile=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
+    if(!(options=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
+    if(!(ppopts=malloc(len))){puts(nomem);raus(EXIT_FAILURE);}
     *options=0;*ppopts=0;
     for(i=1;i<argc+count;i++){
         if(i<argc) parm=argv[i]; else parm=confp[i-argc];
@@ -461,7 +461,7 @@ int main(int argc,char *argv[])
             if(flags&VERYVERBOSE) printf("File %s=%d\n",file,t);
             if(!cmname&&(flags&CROSSMODULE)&&t<=CCSRC){
               cmname=malloc(NAMEBUF);
-              if(!cmname){printf(nomem);exit(EXIT_FAILURE);}
+              if(!cmname){puts(nomem);exit(EXIT_FAILURE);}
               if(tfl==OBJ){
                 strcpy(cmname,file);
               }else{
@@ -516,7 +516,7 @@ int main(int argc,char *argv[])
                           char *s;
                           s=tmpnam(0);
                           cmfiles=malloc(strlen(s)+16);
-                          if(!cmfiles){printf(nomem);exit(EXIT_FAILURE);}
+                          if(!cmfiles){puts(nomem);exit(EXIT_FAILURE);}
                           sprintf(cmfiles,"-cmd= \"%s\"",s);
                           cmdfile=fopen(s,"w");
                           if(!cmdfile){printf("Could not open <%s>!\n",s);exit(EXIT_FAILURE);}
@@ -527,17 +527,17 @@ int main(int argc,char *argv[])
 #else
                         if(!cmfiles){
                           cmfiles=malloc(strlen(oldfile)+3);
-                          if(!cmfiles){printf(nomem);exit(EXIT_FAILURE);}
+                          if(!cmfiles){puts(nomem);exit(EXIT_FAILURE);}
                           strcpy(cmfiles,oldfile);
                         }else{
                           cmfiles=realloc(cmfiles,strlen(cmfiles)+strlen(oldfile)+3);
-                          if(!cmfiles){printf(nomem);exit(EXIT_FAILURE);}
+                          if(!cmfiles){puts(nomem);exit(EXIT_FAILURE);}
                           strcat(cmfiles," ");strcat(cmfiles,oldfile);
                         }
 #endif
                         if(!cmoutput){
                           cmoutput=malloc(strlen(file)+1);
-                          if(!cmoutput){printf(nomem);exit(EXIT_FAILURE);}
+                          if(!cmoutput){puts(nomem);exit(EXIT_FAILURE);}
                           strcpy(cmoutput,file);
                         }
                         break;
@@ -577,10 +577,10 @@ int main(int argc,char *argv[])
         FILE *objfile=0;
         char *tfname;
         objects=malloc(linklen);
-        if(!objects){printf(nomem);raus(EXIT_FAILURE);}
+        if(!objects){puts(nomem);raus(EXIT_FAILURE);}
         linklen+=strlen(ldname)+strlen(destname)+strlen(userlibs)+10;
         if(flags&VERYVERBOSE) printf("linklen=%d\n",linklen);
-        if(!(linkcmd=malloc(linklen))){printf(nomem);raus(EXIT_FAILURE);}
+        if(!(linkcmd=malloc(linklen))){puts(nomem);raus(EXIT_FAILURE);}
         p=first_obj;
         if(linklen>=MAXCLEN){
             tfname=tmpnam(0);
