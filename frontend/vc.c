@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <io.h>
 
 #ifdef AMIGA
 #pragma amiga-align
