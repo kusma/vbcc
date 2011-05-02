@@ -74,10 +74,10 @@ int MAXCLEN=32000;
 char empty[]="";
 /*  Namen der einzelnen Phasen  */
 char *ppname=empty,*ccname=empty,*asname=empty,*ldname=empty,*l2name=empty;
-char *rmname=empty,*scname=empty;
+char *scname=empty;
 /*  dasselbe fuer VERBOSE   */
 char *ppv=empty,*ccv=empty,*asv=empty,*ldv=empty,*l2v=empty;
-char *rmv=empty,*scv=empty;
+char *scv=empty;
 
 /*  Linker-Commandfile  */
 char *cf="@%s";
@@ -181,9 +181,9 @@ void fatalf(const char *fmt, ...)
 void del_scratch(struct NameList *p)
 {
     while(p){
-        sprintf(command,rmname,p->obj);
-        if(flags&VERBOSE) printf("%s\n",command);
-        if(system(command)) fatalf("%s failed: %s\n",command,strerror(errno));
+        p->obj[strlen(p->obj)-1]='\0';
+        if(flags&VERBOSE) printf("unlinking '%s'\n",p->obj+1);
+        if(unlink(p->obj+1)<0) fatalf("unlink('%s') failed: %s\n",p->obj+1,strerror(errno));
         p=p->next;
     }
 }
@@ -333,13 +333,11 @@ int main(int argc,char *argv[])
         if(!strncmp(parm,"-as=",4)){asname=parm+4;*parm=0;}
         if(!strncmp(parm,"-ld=",4)){ldname=parm+4;*parm=0;}
         if(!strncmp(parm,"-l2=",4)){l2name=parm+4;*parm=0;}
-        if(!strncmp(parm,"-rm=",4)){rmname=parm+4;*parm=0;}
         if(!strncmp(parm,"-ppv=",5)){ppv=parm+5;*parm=0;}
         if(!strncmp(parm,"-ccv=",5)){ccv=parm+5;*parm=0;}
         if(!strncmp(parm,"-asv=",5)){asv=parm+5;*parm=0;}
         if(!strncmp(parm,"-ldv=",5)){ldv=parm+5;*parm=0;}
         if(!strncmp(parm,"-l2v=",5)){l2v=parm+5;*parm=0;}
-        if(!strncmp(parm,"-rmv=",5)){rmv=parm+5;*parm=0;}
         if(!strncmp(parm,"-cf=",4)){cf=parm+4;*parm=0;}
         if(!strncmp(parm,"-isc=",5)){scname=parm+5;*parm=0;}
         if(!strncmp(parm,"-iscv=",6)){scv=parm+6;*parm=0;}
@@ -424,12 +422,12 @@ int main(int argc,char *argv[])
     if(scname==empty) flags&=~SCHEDULER;
     if(flags&VERYVERBOSE){
       ppname=ppv;ccname=ccv;asname=asv;ldname=ldv;
-      rmname=rmv;l2name=l2v;scname=scv;
+      l2name=l2v;scname=scv;
     }
     if(flags&NOSTDLIB){ldname=l2name;}
     /*  Nummer sicher...    */
     len+=strlen(ppname)+strlen(ccname)+strlen(asname)+
-         strlen(rmname)+strlen(scname)+strlen(userlibs)+NAMEBUF+100;
+         strlen(scname)+strlen(userlibs)+NAMEBUF+100;
     if(!(command=malloc(len))){fatal(nomem);}
     if(!(oldfile=malloc(len))){fatal(nomem);}
     if(!(options=malloc(len))){fatal(nomem);}
