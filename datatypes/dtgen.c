@@ -133,7 +133,7 @@ int askyn(char *def)
   do{
     printf("Type y or n [%s]: ",def);
     fflush(stdout);
-    fgets(in,127,stdin);
+    fgets(in,sizeof(in),stdin);
     if(*in=='\n') strcpy(in,def);
   }while(*in!='y'&&*in!='n');
   return *in=='y';
