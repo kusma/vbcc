@@ -1602,7 +1602,7 @@ static void create_loadable(FILE *f,struct obj *o,int r)
   }
 }
 
-static get_reg()
+static int get_reg()
 {
   int i;
   for(i=2;i<=32;i++){
@@ -2092,8 +2092,15 @@ static int handle_llong(FILE *f,struct IC *p)
   }
   
   if((q1typ(p)&NQ)==LLONG){
-    load_hword(f,r3,&p->q1,q1typ(p),0);
-    load_lword(f,r4,&p->q1,q1typ(p),0);
+    if(p->q1.am&&p->q1.am->base==r3){
+      if(p->q1.am->flags==REG_IND&&p->q1.am->offset==r4) ierror(0);
+      load_lword(f,r4,&p->q1,q1typ(p),0);
+      load_hword(f,r3,&p->q1,q1typ(p),0);
+    }else{
+      if(p->q1.am&&p->q1.am->flags==REG_IND&&p->q1.am->offset==r3) ierror(0);
+      load_hword(f,r3,&p->q1,q1typ(p),0);
+      load_lword(f,r4,&p->q1,q1typ(p),0);
+    }
   }else{
     if(!ISFLOAT(q1typ(p))) ierror(0);
     load_reg(f,f1,&p->q1,q1typ(p),0); 
@@ -2106,8 +2113,15 @@ static int handle_llong(FILE *f,struct IC *p)
 	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r5],tmpoff-4,mregnames[sp]);
 	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r6],tmpoff-8,mregnames[sp]);
       }else{
-	load_hword(f,r5,&p->q2,q2typ(p),0);
-	load_lword(f,r6,&p->q2,q2typ(p),0);
+	if(p->q2.am&&p->q2.am->base==r5){
+	  if(p->q2.am->flags==REG_IND&&p->q2.am->offset==r6) ierror(0);
+	  load_lword(f,r6,&p->q2,q2typ(p),0);
+	  load_hword(f,r5,&p->q2,q2typ(p),0);
+	}else{
+	  if(p->q2.am&&p->q2.am->flags==REG_IND&&p->q2.am->offset==r5) ierror(0);
+	  load_hword(f,r5,&p->q2,q2typ(p),0);
+	  load_lword(f,r6,&p->q2,q2typ(p),0);
+	}
       }
     }else{
       if((q2typ(p)&NQ)>=LLONG) ierror(0);
@@ -2517,9 +2531,10 @@ void gen_var_head(FILE *f,struct Var *v)
       emit(f,"\t.size\t%s%ld,%ld\n",labprefix,zm2l(v->offset),zm2l(szof(v->vtyp)));
       gen_align(f,falign(v->vtyp));
       emit(f,"%s%ld:\n",labprefix,zm2l(v->offset));
-    }else
+    }else{
       emit(f,"\t.lcomm\t%s%ld,",labprefix,zm2l(v->offset));
-    newobj=1;
+      newobj=1;
+    }
   }
   if(v->storage_class==EXTERN){
     emit(f,"\t.global\t%s%s\n",idprefix,v->identifier);
@@ -2558,9 +2573,10 @@ void gen_var_head(FILE *f,struct Var *v)
         emit(f,"\t.size\t%s%s,%ld\n",idprefix,v->identifier,zm2l(szof(v->vtyp)));
 	gen_align(f,falign(v->vtyp));
         emit(f,"%s%s:\n",idprefix,v->identifier);
-      }else
+      }else{
         emit(f,"\t.%scomm\t%s%s,",USE_COMMONS?"":"l",idprefix,v->identifier);
-      newobj=1;
+	newobj=1;
+      }
     }
   }
 }
@@ -3435,6 +3451,24 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
       continue;
     }
     if(c>=LSHIFT&&c<=MOD){
+      if(c==RSHIFT&&((t&NQ)<=SHORT)){
+	/* special treatment for short shifts used in bitfields with
+	   sub-int type; will not handle the general case (which, however,
+	   should never occur) */
+	int width,shift;
+	width=sizetab[t&NQ]*8;
+	if(!(p->q2.flags&KONST)) ierror(0);
+	eval_const(&p->q2.val,p->typf2&NU);
+	shift=zm2l(vmax);
+	if(shift<0||shift>=width) ierror(0);
+	if(shift==0) continue;
+	if(!(t&UNSIGNED)){
+	  emit(f,"\texts%c\t%s,%s\n",width==8?'b':'h',mregnames[zreg],mregnames[q1reg]);
+	  q1reg=zreg;
+	}
+	emit(f,"\trlwinm\t%s,%s,%d,%d,%d\n",mregnames[zreg],mregnames[q1reg],32-shift,32-width+((t&UNSIGNED)?shift:0),31);
+	continue;
+      }
       if(c==RSHIFT&&!(t&UNSIGNED)){
         emit(f,"\tsraw%s%s\t%s,%s,",isimm[q2reg==0],record[setcc],mregnames[zreg],mregnames[q1reg]);
         emit_obj(f,&p->q2,q2typ(p)); emit(f,"\n");
@@ -3496,7 +3530,10 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
         emit(f,"\t%s%s%s%s%s\t%s,%s,",fpp,arithmetics[c-LSHIFT],(t&NQ)==FLOAT?"s":"",isimm[q2reg==0],record[setcc&&q2reg&&!fpf],mregnames[zreg],mregnames[q1reg]);
         if(setcc&&q2reg&&!fpf) ccset=1;
       }
-      emit_obj(f,&p->q2,q2typ(p)&NQ);emit(f,"\n");
+      emit_obj(f,&p->q2,q2typ(p)&NQ);
+      /* fix for illegal shift values (undefined behaviour) */
+      if((c==LSHIFT||c==RSHIFT)&&q2reg==0) emit(f,"&31");
+      emit(f,"\n");
       continue;
     }
     pric2(stdout,p);

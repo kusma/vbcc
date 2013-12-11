@@ -580,6 +580,7 @@ int init_cg(void)
   /*  because they are stored in the target's arithmetic.             */
   maxalign=l2zm(8L);
   char_bit=l2zm(8L);
+  stackalign=l2zm(4);
 
   for(i=0;i<=MAX_TYPE;i++){
     sizetab[i]=l2zm(msizetab[i]);
@@ -914,7 +915,10 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 #endif
 
   function_top(f,v,localsize);
+
+#if FIXED_SP
   pushed=0;
+#endif
 
   for(;p;p=p->next){
     c=p->code;t=p->typf;
@@ -923,7 +927,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
     if(c==FREEREG) {regs[p->q1.reg]=0;continue;}
     if(c==LABEL) {emit(f,"%s%d:\n",labprefix,t);continue;}
     if(c==BRA){
-      if(t==exit_label&&framesize==0)
+      if(0/*t==exit_label&&framesize==0*/)
 	emit(f,ret);
       else
 	emit(f,"\tb\t%s%d\n",labprefix,t);

@@ -124,9 +124,9 @@ struct ext_ic {
                            "\tslwi\t3,3,3\n"\
                            "\tstwux\t0,1,3\n"\
                            "\taddi\t3,1,____fo"
-#define FREEVLA_REG 4
+#define FREEVLA_REG 6
 #define FREEVLA_INLINEASM "\tlwz\t0,0(1)\n"\
-                          "\tmr\t1,3\n"\
+                          "\tmr\t1,5\n"\
                           "\tstw\t0,0(1)"
 #define OLDSPVLA_INLINEASM "\tmr\t3,1"
 #define FPVLA_REG 32

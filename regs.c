@@ -10,7 +10,7 @@ static char FILE_[]=__FILE__;
 int (*savings)[MAXR+1],regu[MAXR+1];
 int *rvlist;
 
-static const_vars;
+static int const_vars;
 
 struct regp {int treg;struct Var *tvar,*tmp;};
 void do_load_parms(struct regp [],struct flowgraph *);
@@ -1057,7 +1057,7 @@ void local_combine(struct flowgraph *fg)
       }
       pprev=p->prev;
       while(pprev&&pprev->code==NOP) pprev=pprev->prev;
-      if(pprev&&p->code==ASSIGN&&zmeqto(p->q2.val.vmax,sizetab[p->typf&NQ])&&(p->q1.flags&(VAR|DREFOBJ))==VAR&&pprev->z.flags==p->q1.flags&&p->q1.v==pprev->z.v&&!BTST(used,p->q1.v->index)&&(pprev->code!=ASSIGN||zmeqto(pprev->q2.val.vmax,sizetab[pprev->typf&NQ]))){
+      if(pprev&&p->code==ASSIGN&&zmeqto(p->q2.val.vmax,sizetab[p->typf&NQ])&&(p->q1.flags&(VAR|DREFOBJ))==VAR&&pprev->z.flags==p->q1.flags&&p->q1.v==pprev->z.v&&ztyp(pprev)==q1typ(p)&&!BTST(used,p->q1.v->index)&&(pprev->code!=ASSIGN||zmeqto(pprev->q2.val.vmax,sizetab[pprev->typf&NQ]))){
 	/* x op y ->tmp; move tmp->*p => x op y ->*p */
 	if(DEBUG&1024){
 	  printf("local combine(3):\n");
@@ -1451,7 +1451,7 @@ void insert_saves(struct flowgraph *fg)
 	  if(i){
 	    if(!n) before=fg->start->prev; else before=n;
 	    after=p->next;
-	    while(after&&(after->code==FREEREG||after->code==ALLOCREG))
+	    while(after&&(after->code==FREEREG||after->code==ALLOCREG||after->code==NOP))
 	      after=after->next;
 	    if(!after||after->code!=GETRETURN){
 	      after=p;

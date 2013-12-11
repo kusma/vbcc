@@ -74,15 +74,15 @@ int *transient_characters = 0;
 
 #ifdef NATIVE_UINTMAX
 
-typedef NATIVE_UINTMAX ulong;
-typedef NATIVE_INTMAX slong;
+typedef NATIVE_UINTMAX ucppulong;
+typedef NATIVE_INTMAX ucppslong;
 
-#define to_ulong(x)		((ulong)(x))
-#define to_slong(x)		((slong)(x))
+#define to_ulong(x)		((ucppulong)(x))
+#define to_slong(x)		((ucppslong)(x))
 
 #define op_star_u(x, y)		((x) * (y))
 
-static inline ulong op_slash_u(ulong x, ulong y)
+static inline ucppulong op_slash_u(ucppulong x, ucppulong y)
 {
 	if (y == 0) {
 		error(eval_line, "division by 0");
@@ -91,7 +91,7 @@ static inline ulong op_slash_u(ulong x, ulong y)
 	return x / y;
 }
 
-static inline ulong op_pct_u(ulong x, ulong y)
+static inline ucppulong op_pct_u(ucppulong x, ucppulong y)
 {
 	if (y == 0) {
 		error(eval_line, "division by 0");
@@ -122,7 +122,7 @@ static inline ulong op_pct_u(ulong x, ulong y)
 
 #define op_star_s(x, y)		((x) * (y))
 
-static inline slong op_slash_s(slong x, slong y)
+static inline ucppslong op_slash_s(ucppslong x, ucppslong y)
 {
 	if (y == 0) {
 		error(eval_line, "division by 0");
@@ -131,7 +131,7 @@ static inline slong op_slash_s(slong x, slong y)
 	return x / y;
 }
 
-static inline slong op_pct_s(slong x, slong y)
+static inline ucppslong op_pct_s(ucppslong x, ucppslong y)
 {
 	if (y == 0) {
 		error(eval_line, "division by 0");
@@ -160,7 +160,7 @@ static inline slong op_pct_s(slong x, slong y)
 #define op_uplus_s(x)		(x)
 #define op_uminus_s(x)		op_neg_s(x)
 
-#define op_promo(x)		((ulong)x)
+#define op_promo(x)		((ucppulong)x)
 #define back_ulong(x)		((unsigned long)x)
 
 #else
@@ -181,31 +181,31 @@ static inline slong op_pct_s(slong x, slong y)
 
 typedef struct {
 	unsigned long msw, lsw;
-} ulong;
+} ucppulong;
 
-#define slong	ulong
+#define ucppslong	ucppulong
 
-static ulong to_ulong(unsigned long x)
+static ucppulong to_ulong(unsigned long x)
 {
-	ulong y;
+	ucppulong y;
 
 	y.msw = 0;
 	y.lsw = x;
 	return y;
 }
 
-static slong to_slong(long x)
+static ucppslong to_slong(long x)
 {
-	slong y;
+	ucppslong y;
 
 	y.lsw = x;
 	y.msw = x >= 0 ? 0 : (unsigned long)(-1);
 	return y;
 }
 
-static ulong op_plus_u(ulong x, ulong y)
+static ucppulong op_plus_u(ucppulong x, ucppulong y)
 {
-	ulong z;
+	ucppulong z;
 
 	z.lsw = x.lsw + y.lsw;
 	z.msw = x.msw + y.msw;
@@ -213,9 +213,9 @@ static ulong op_plus_u(ulong x, ulong y)
 	return z;
 }
 
-static ulong op_neg_u(ulong x)
+static ucppulong op_neg_u(ucppulong x)
 {
-	ulong z;
+	ucppulong z;
 
 	z.lsw = ~x.lsw;
 	z.msw = ~x.msw;
@@ -225,9 +225,9 @@ static ulong op_neg_u(ulong x)
 
 #define op_minus_u(x, y)	op_plus_u(x, op_neg_u(y))
 
-static ulong op_lsh_u(ulong x, int s)
+static ucppulong op_lsh_u(ucppulong x, int s)
 {
-	ulong z;
+	ucppulong z;
 
 	s %= (2 * LONGSIZE);
 	if (s == 0) return x;
@@ -241,9 +241,9 @@ static ulong op_lsh_u(ulong x, int s)
 	return z;
 }
 
-static ulong op_rsh_u(ulong x, int s)
+static ucppulong op_rsh_u(ucppulong x, int s)
 {
-	ulong z;
+	ucppulong z;
 
 	s %= (2 * LONGSIZE);
 	if (s == 0) return x;
@@ -257,7 +257,7 @@ static ulong op_rsh_u(ulong x, int s)
 	return z;
 }
 
-static int op_lt_u(ulong x, ulong y)
+static int op_lt_u(ucppulong x, ucppulong y)
 {
 	if (x.msw < y.msw) return 1;
 	if (x.msw > y.msw) return 0;
@@ -265,7 +265,7 @@ static int op_lt_u(ulong x, ulong y)
 	return 0;
 }
 
-static int op_leq_u(ulong x, ulong y)
+static int op_leq_u(ucppulong x, ucppulong y)
 {
 	if (x.msw < y.msw) return 1;
 	if (x.msw > y.msw) return 0;
@@ -276,34 +276,34 @@ static int op_leq_u(ulong x, ulong y)
 #define op_gt_u(x, y)	op_lt_u(y, x)
 #define op_geq_u(x, y)	op_leq_u(y, x)
 
-static int op_same_u(ulong x, ulong y)
+static int op_same_u(ucppulong x, ucppulong y)
 {
 	return x.msw == y.msw && x.lsw == y.lsw;
 }
 
 #define op_neq_u(x, y)	(!op_same_u(x, y))
 
-static ulong op_and_u(ulong x, ulong y)
+static ucppulong op_and_u(ucppulong x, ucppulong y)
 {
-	ulong z;
+	ucppulong z;
 
 	z.lsw = x.lsw & y.lsw;
 	z.msw = x.msw & y.msw;
 	return z;
 }
 
-static ulong op_circ_u(ulong x, ulong y)
+static ucppulong op_circ_u(ucppulong x, ucppulong y)
 {
-	ulong z;
+	ucppulong z;
 
 	z.lsw = x.lsw ^ y.lsw;
 	z.msw = x.msw ^ y.msw;
 	return z;
 }
 
-static ulong op_or_u(ulong x, ulong y)
+static ucppulong op_or_u(ucppulong x, ucppulong y)
 {
-	ulong z;
+	ucppulong z;
 
 	z.lsw = x.lsw | y.lsw;
 	z.msw = x.msw | y.msw;
@@ -313,9 +313,9 @@ static ulong op_or_u(ulong x, ulong y)
 #define op_lval_u(x)	op_neq_u(x, to_ulong(0))
 #define op_lnot_u(x)	(!op_lval_u(x))
 
-static ulong op_not_u(ulong x)
+static ucppulong op_not_u(ucppulong x)
 {
-	ulong z;
+	ucppulong z;
 
 	z.lsw = ~x.lsw;
 	z.msw = ~x.msw;
@@ -325,9 +325,9 @@ static ulong op_not_u(ulong x)
 #define op_uplus_u(x)	(x)
 #define op_uminus_u(x)	op_neg_u(x)
 
-static ulong umul(unsigned long x, unsigned long y)
+static ucppulong umul(unsigned long x, unsigned long y)
 {
-	ulong z;
+	ucppulong z;
 	unsigned long t00, t01, t10, t11, c = 0, t;
 
 	t00 = UL_LS(x) * UL_LS(y);
@@ -342,9 +342,9 @@ static ulong umul(unsigned long x, unsigned long y)
 	return z;
 }
 
-static ulong op_star_u(ulong x, ulong y)
+static ucppulong op_star_u(ucppulong x, ucppulong y)
 {
-	ulong z1, z2;
+	ucppulong z1, z2;
 
 	z1.lsw = z2.lsw = 0;
 	z1.msw = x.lsw * y.msw;
@@ -352,7 +352,7 @@ static ulong op_star_u(ulong x, ulong y)
 	return op_plus_u(umul(x.lsw, y.lsw), op_plus_u(z1, z2));
 }
 
-static void udiv(ulong x, ulong y, ulong *q, ulong *r)
+static void udiv(ucppulong x, ucppulong y, ucppulong *q, ucppulong *r)
 {
 	int i, j;
 
@@ -366,7 +366,7 @@ static void udiv(ulong x, ulong y, ulong *q, ulong *r)
 		throw(eval_exception);
 	}
 	for (j = 2 * LONGSIZE - 1 - i; j >= 0; j --) {
-		ulong a = op_lsh_u(y, j);
+		ucppulong a = op_lsh_u(y, j);
 
 		if (op_leq_u(a, x)) {
 			x = op_minus_u(x, a);
@@ -379,26 +379,26 @@ static void udiv(ulong x, ulong y, ulong *q, ulong *r)
 	*r = x;
 }
 
-static ulong op_slash_u(ulong x, ulong y)
+static ucppulong op_slash_u(ucppulong x, ucppulong y)
 {
-	ulong q, r;
+	ucppulong q, r;
 
 	udiv(x, y, &q, &r);
 	return q;
 }
 
-static ulong op_pct_u(ulong x, ulong y)
+static ucppulong op_pct_u(ucppulong x, ucppulong y)
 {
-	ulong q, r;
+	ucppulong q, r;
 
 	udiv(x, y, &q, &r);
 	return r;
 }
 
 
-static slong op_star_s(slong x, slong y)
+static ucppslong op_star_s(ucppslong x, ucppslong y)
 {
-	ulong a = x, b = y, c;
+	ucppulong a = x, b = y, c;
 	int xn = 0, yn = 0;
 
 	if (SIGNBIT(x.msw)) { a = op_neg_u(x); xn = 1; }
@@ -410,9 +410,9 @@ static slong op_star_s(slong x, slong y)
 	return c;
 }
 
-static void sdiv(slong x, slong y, slong *q, slong *r)
+static void sdiv(ucppslong x, ucppslong y, ucppslong *q, ucppslong *r)
 {
-	ulong a = x, b = y, c, d;
+	ucppulong a = x, b = y, c, d;
 	int xn = 0, yn = 0;
 
 	if (SIGNBIT(x.msw)) { a = op_neg_u(x); xn = 1; }
@@ -422,17 +422,17 @@ static void sdiv(slong x, slong y, slong *q, slong *r)
 	if (xn ^ yn) *r = op_neg_u(d); else *r = d;
 }
 
-static slong op_slash_s(slong x, slong y)
+static ucppslong op_slash_s(ucppslong x, ucppslong y)
 {
-	slong q, r;
+	ucppslong q, r;
 
 	sdiv(x, y, &q, &r);
 	return q;
 }
 
-static slong op_pct_s(slong x, slong y)
+static ucppslong op_pct_s(ucppslong x, ucppslong y)
 {
-	slong q, r;
+	ucppslong q, r;
 
 	sdiv(x, y, &q, &r);
 	return r;
@@ -448,10 +448,10 @@ static slong op_pct_s(slong x, slong y)
  * specified. We emit a warning, and extend the sign (which is what
  * most implementations do).
  */
-static slong op_rsh_s(slong x, int y)
+static ucppslong op_rsh_s(ucppslong x, int y)
 {
 	int xn = (SIGNBIT(x.msw) != 0);
-	ulong q = op_rsh_u(x, y);
+	ucppulong q = op_rsh_u(x, y);
 
 	if (xn && y > 0) {
 		if (emit_eval_warnings)
@@ -463,7 +463,7 @@ static slong op_rsh_s(slong x, int y)
 	return q;
 }
 
-static int op_lt_s(slong x, slong y)
+static int op_lt_s(ucppslong x, ucppslong y)
 {
 	int xn = (SIGNBIT(x.msw) != 0);
 	int yn = (SIGNBIT(y.msw) != 0);
@@ -474,7 +474,7 @@ static int op_lt_s(slong x, slong y)
 	return op_lt_u(x, y);
 }
 
-static int op_leq_s(slong x, slong y)
+static int op_leq_s(ucppslong x, ucppslong y)
 {
 	int xn = (SIGNBIT(x.msw) != 0);
 	int yn = (SIGNBIT(y.msw) != 0);
@@ -508,8 +508,8 @@ static int op_leq_s(slong x, slong y)
 typedef struct {
 	int sign;
 	union {
-		ulong uv;
-		slong sv;
+		ucppulong uv;
+		ucppslong sv;
 	} u;
 } ppval;
 

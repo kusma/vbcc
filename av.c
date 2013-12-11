@@ -24,7 +24,7 @@ void print_av(bvtype *bitvector)
         if(BTST(bitvector,i)) printf("%3d: (%s),%ld\n",i,vilist[i]->identifier,zm2l(vilist[i]->offset));
 }
 
-static clcnt;
+static int clcnt;
 
 /* walks through a clist and numbers variables whose addresses are
    contained; if pass==-1, index is set to -1, if pass==0, index is set,

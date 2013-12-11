@@ -467,6 +467,7 @@ struct IC{
 #define MOVETOREG 96
 #define NOP 97
 #define BITFIELD 98
+#define LITERAL 99
 extern char *typname[];
 extern zmax sizetab[];
 extern char *storage_class_name[];
@@ -550,6 +551,7 @@ typedef struct node *np;
 struct const_list{
   union atyps val;
   np tree;
+  zmax idx;
   struct const_list *other,*next;
 };
 #define CLS sizeof(struct const_list)
@@ -670,6 +672,7 @@ extern void remove_IC(struct IC *);
 extern struct IC *clone_ic(struct IC *);
 extern struct IC *new_IC(void);
 extern struct Var *new_var(void);
+extern void insert_bitfield(struct obj *,struct obj *,struct obj *,int,int,int,int);
 extern void *mymalloc(size_t);
 extern void *myrealloc(void *,size_t);
 extern void myfree(void *p);
@@ -737,6 +740,18 @@ extern void mark_eff_ics(void);
 #endif
 #ifndef FPVLA_REG
 #define FPVLA_REG 0
+#endif
+#ifndef MIN_INT_TO_FLOAT_TYPE
+#define MIN_INT_TO_FLOAT_TYPE CHAR
+#endif
+#ifndef MIN_FLOAT_TO_INT_TYPE
+#define MIN_FLOAT_TO_INT_TYPE CHAR
+#endif
+#ifndef AVOID_FLOAT_TO_UNSIGNED
+#define AVOID_FLOAT_TO_UNSIGNED 0
+#endif
+#ifndef AVOID_UNSIGNED_TO_FLOAT
+#define AVOID_UNSIGNED_TO_FLOAT 0
 #endif
 #if HAVE_OSEK
 /* removed */

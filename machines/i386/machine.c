@@ -850,9 +850,10 @@ void gen_var_head(FILE *f,struct Var *v)
     if(!v->clist&&section!=BSS){emit(f,bssname);if(f) section=BSS;}
     if(section!=BSS)
       emit(f,"\t.align\t4\n%s%ld:\n",labprefix,zm2l(v->offset));
-    else
+    else{
       emit(f,"\t.lcomm\t%s%ld,",labprefix,zm2l(v->offset));
-    newobj=1;
+      newobj=1;
+    }
   }
   if(v->storage_class==EXTERN){
     emit(f,"\t.globl\t%s%s\n",idprefix,v->identifier);
@@ -864,9 +865,10 @@ void gen_var_head(FILE *f,struct Var *v)
       if(!v->clist&&section!=BSS){emit(f,bssname);if(f) section=BSS;}
       if(section!=BSS)
         emit(f,"\t.align\t4\n%s%s:\n",idprefix,v->identifier);
-      else
+      else{
         emit(f,"\t.comm\t%s%s,",idprefix,v->identifier);
-      newobj=1;
+	newobj=1;
+      }
     }
   }
 }

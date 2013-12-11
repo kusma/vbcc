@@ -147,7 +147,7 @@
 "goto without label",ERROR|ANSIV,
 "continue not within loop",ERROR|ANSIV,                             /*  145 */
 "break not in matching construct",ERROR|ANSIV,
-"label <%s> was never defined",ERROR|ANSIV|INFUNC,
+"label <%s> was never defined",ERROR|ANSIV|INFUNC|NORAUS,
 "label <%s> was never used",WARNING|INFUNC,
 "register %s not ok",WARNING,
 "default not in switch",WARNING|ANSIV,                              /*  150 */
@@ -353,3 +353,10 @@
 "access is %s",ERROR|ANSIV,                                        /* 350 */
 "jump into scope of variable-length-array",ERROR|ANSIV|INIC|FATAL,
 "variable-length-array (%s) in struct/union",ERROR|ANSIV,
+"encountered non-existent label during optimizing",ERROR|ANSIV|INFUNC|FATAL,
+"array designator not in valid range",ERROR|ANSIV,
+"'=' expected",ERROR|ANSIV,                                        /* 355 */
+"type has non-empty identifier",WARNING|ANSIV,
+"unterminated // comment",PREPROC|WARNING|ANSIV,
+"initialization of variable-length array",ERROR|ANSIV,
+"initialization of flexible array member",ERROR|ANSIV,

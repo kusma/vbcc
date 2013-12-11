@@ -41,10 +41,12 @@
 /*
  * Define AMIGA for systems using "drive letters" at the beginning of
  * some paths; define MSDOS on systems with drive letters and using
- * backslashes to seperate directory components.
+ * backslashes to seperate directory components. ATARI is same as MSDOS
+ * but does not use %VAR% notation and Turbo C specific code.
  */
 /* #define AMIGA */
 /* #define MSDOS */
+/* #define ATARI */
 
 /* ====================================================================== */
 /*

@@ -1421,7 +1421,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
       continue;
     }
     
-    if(ISFLOAT(t)) {pric2(stdout,p);ierror(0);}
+    /*if(ISFLOAT(t)) {pric2(stdout,p);ierror(0);}*/
 
     if((t&NQ)==BIT){
       ierror(0);
@@ -1479,7 +1479,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
       if((t&NU)==INT) t=SHORT;
       if((t&NU)==(UNSIGNED|INT)||(t&NU)==NPOINTER) t=(UNSIGNED|SHORT);
       if((t&NQ)==FPOINTER||(t&NQ)==HPOINTER) t=(UNSIGNED|LONG);
-      if((t&NQ)>=LONG||(to&NQ)>=LONG) ierror(0);
+      /*if((t&NQ)>=LONG||(to&NQ)>=LONG) ierror(0);*/
       if((to&NQ)<=LONG&&(t&NQ)<=LONG){
 	if((to&NQ)<(t&NQ)){
 	  if(!ISRACC(q1)&&!ISRACC(z))
@@ -2026,23 +2026,35 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	    emit(f,"\tcoma\n");
 	  else if((c==AND&&h!=255)||(c==OR&&h!=0)||(c==XOR&&h!=0))
 	    emit(f,"\t%sa\t#%lu\n",s,h);
-	  h=l&255;
-	  if(c==AND&&h==0)
-	    emit(f,"\tclrb\n");
-	  else if(c==XOR&&h==255)
-	    emit(f,"\tcomb\n");
-	  else if((c==AND&&h!=255)||(c==OR&&h!=0)||(c==XOR&&h!=0))
-	    emit(f,"\t%sb\t#%lu\n",s,h);
+	  if((t&NQ)!=CHAR){
+	    h=l&255;
+	    if(c==AND&&h==0)
+	      emit(f,"\tclrb\n");
+	    else if(c==XOR&&h==255)
+	      emit(f,"\tcomb\n");
+	    else if((c==AND&&h!=255)||(c==OR&&h!=0)||(c==XOR&&h!=0))
+	      emit(f,"\t%sb\t#%lu\n",s,h);
+	  }
 	}else{
 	  if(isreg(q2)){
 	    if(p->q2.reg==acc){
-	      if(c==XOR) emit(f,"\tclra\n\tclrb\n");
+	      if(c==XOR){
+		emit(f,"\tclra\n");
+		if((t&NQ)!=CHAR) emit(f,"\tclrb\n");
+	      }
 	    }else{
-	      emit(f,"\tpsh%s\n",regnames[p->q2.reg]);
-	      push(2);
-	      emit(f,"\t%sa\t1,%s+\n",s,regnames[sp]);
-	      emit(f,"\t%sb\t1,%s+\n",s,regnames[sp]);
-	      pop(2);
+	      if((t&NQ)==CHAR){
+		emit(f,"\tpsha\n");
+		push(1);
+		emit(f,"\t%sa\t1,%s+\n",s,regnames[sp]);
+		pop(1);
+	      }else{
+		emit(f,"\tpsh%s\n",regnames[p->q2.reg]);
+		push(2);
+		emit(f,"\t%sa\t1,%s+\n",s,regnames[sp]);
+		emit(f,"\t%sb\t1,%s+\n",s,regnames[sp]);
+		pop(2);
+	      }
 	    }
 	  }else if((p->q2.flags&(REG|DREFOBJ))==DREFOBJ){
 	    int xr=0;
@@ -2062,10 +2074,12 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	  }else{
 	    emit(f,"\t%sa\t",s);emit_obj(f,&p->q2,t);
 	    emit(f,"\n");
-	    mobj=p->q2;
-	    inc_addr(&mobj,1);
-	    emit(f,"\t%sb\t",s);emit_obj(f,&mobj,t);
-	    emit(f,"\n");
+	    if((t&NQ)!=CHAR){
+	      mobj=p->q2;
+	      inc_addr(&mobj,1);
+	      emit(f,"\t%sb\t",s);emit_obj(f,&mobj,t);
+	      emit(f,"\n");
+	    }
 	  }
 	}
 	cc=0;

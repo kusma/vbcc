@@ -134,3 +134,15 @@ struct reg_handle{
 /* we do not need register-pairs */
 #undef HAVE_REGPAIRS
 
+
+/* do not create CONVERT ICs from integers smaller than int to floats */
+#define MIN_INT_TO_FLOAT_TYPE INT
+
+/* do not create CONVERT ICs from floats to ints smaller than int */
+#define MIN_FLOAT_TO_INT_TYPE INT
+
+/* do not create CONVERT_ICs from floats to unsigned integers */
+#define AVOID_FLOAT_TO_UNSIGNED 1
+
+/* do not create CONVERT_ICs from unsigned integers to floats */
+#define AVOID_UNSIGNED_TO_FLOAT 1

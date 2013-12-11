@@ -333,14 +333,33 @@ np cast_expression(void)
   if(ctok->type!=LPAR||!declaration(1)) return unary_expression();
   next_token();killsp();
   new=mymalloc(NODES);
-  new->flags=CAST;
   new->right=0;
+  buff[0]=0;
   imerk=ident;ident=buff;
   new->ntyp=declarator(declaration_specifiers());
   ident=imerk;
+  if(buff[0]) error(356);
   killsp();
   if(ctok->type!=RPAR) error(59); else next_token();
-  new->left=cast_expression();
+  killsp();
+  if(c99&&ctok->type==LBRA){
+    /* compund literals */
+    init_dyn_cnt=0;
+    new->cl=initialization(new->ntyp,nesting!=0,0,0,0,0);
+    killsp();
+    if(new->cl){
+      if(ISARRAY(new->ntyp->flags)&&zmeqto(new->ntyp->size,l2zm(0L))){
+	struct const_list *p=new->cl;
+	while(p){new->ntyp->size=zmadd(p->idx,l2zm(1L));p=p->next;}
+      }
+    }
+    new->flags=LITERAL;
+    new->left=0;
+    new->val.vmax=l2zm((long)init_dyn_cnt);
+  }else{
+    new->flags=CAST;
+    new->left=cast_expression();
+  }
   return new;
 }
 np unary_expression(void)
@@ -381,10 +400,12 @@ np unary_expression(void)
       if(ctok->type==LPAR&&declaration(1)){
 	struct Typ *t;
 	next_token();killsp();
+	buff[0]=0;
 	merk=ident;ident=buff;
 	t=declarator(declaration_specifiers());
 	if(type_uncomplete(t)) error(176);
 	ident=merk;
+	if(buff[0]) error(356);
 	if(op==OFFSETOF){
 	  if(ctok->type==COMMA)
 	    next_token();
@@ -707,9 +728,12 @@ np string_expression(void)
       cl=mymalloc(CLS);
       cl->next=0;
       cl->tree=0;
+      cl->idx=l2zm((long)i);
+      cl->val.vmax=l2zm(0L);
       cl->other=mymalloc(CLS);
       cl->other->next=cl->other->other=0;
       cl->other->tree=0;
+      cl->other->idx=l2zm(0L);
       cl->other->val.vchar=zm2zc(l2zm((long)string[i]));
       *prev=cl;
       prev=&cl->next;

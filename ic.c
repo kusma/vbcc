@@ -74,7 +74,7 @@ static void keep_reg(int r)
 }
 
 /* Generate code to insert a bitfield */
-static void insert_bitfield(struct obj *dest,struct obj *src,struct obj *val,int bfs,int bfo,int t)
+void insert_bitfield(struct obj *dest,struct obj *src,struct obj *val,int bfs,int bfo,int t,int isclear)
 {
   /*FIXME: shortcut beachten? */
   struct IC *new;
@@ -118,22 +118,27 @@ static void insert_bitfield(struct obj *dest,struct obj *src,struct obj *val,int
   }else{
     tmp3=tmp1;
   }
-  new=new_IC();
-  new->code=AND;
-  new->typf=t;
-  new->q1=*dest;
-  new->q1.flags&=~SCRATCH;
-  new->q2.flags=KONST;
-  gval.vmax=zmkompl(zmlshift(zmsub(zmlshift(l2zm(1L),l2zm((int)bfs)),l2zm(1L)),l2zm((long)bfo)));
-  eval_const(&gval,MAXINT);
-  insert_const(&new->q2.val,t);
-  get_scratch(&new->z,t,0,0);
-  tmp2=new->z;
-  add_IC(new);
+  if(!isclear){
+    new=new_IC();
+    new->code=AND;
+    new->typf=t;
+    new->q1=*dest;
+    new->q1.flags&=~SCRATCH;
+    new->q2.flags=KONST;
+    gval.vmax=zmkompl(zmlshift(zmsub(zmlshift(l2zm(1L),l2zm((int)bfs)),l2zm(1L)),l2zm((long)bfo)));
+    eval_const(&gval,MAXINT);
+    insert_const(&new->q2.val,t);
+    get_scratch(&new->z,t,0,0);
+    tmp2=new->z;
+    add_IC(new);
+  }
   new=new_IC();
   new->code=OR;
   new->typf=t;
-  new->q1=tmp2;
+  if(isclear)
+    new->q1=*dest;
+  else
+    new->q1=tmp2;
   new->q2=tmp3;
   new->z=*dest;
   add_IC(new);
@@ -453,7 +458,6 @@ np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2)
       np cnv=mymalloc(NODES);
       cnv->flags=CAST;
       cnv->left=arg1;
-
       cnv->right=0;
       cnv->ntyp=t1;
       al->arg=cnv;
@@ -475,8 +479,11 @@ np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2)
   }
   new->alist=al;
   /* Kann man type_expr nochmal auf die Argumente anwenden? */
+  if(t1||t2)
+    no_cast_free=1;
   if(!type_expression(new))
     ierror(0); 
+  no_cast_free=0;
   gen_IC(new,0,0);
   return new;
 }
@@ -489,13 +496,27 @@ void gen_IC(np p,int ltrue,int lfalse)
     if(!p) return;
 
     if(p->flags==STRING){
-    /*  hier fehlt noch die Verwaltung der String-Inhalte   */
         p->o.v=add_var(empty,clone_typ(p->ntyp),STATIC,p->cl);
         p->o.v->flags|=DEFINED;
         p->o.flags=VAR;
         p->o.reg=0;
         p->o.val=p->val;
         return;
+    }
+    if(p->flags==LITERAL){
+      int sc;
+      if(nesting==0||(is_const(p->ntyp)&&zmeqto(p->val.vmax,l2zm(0L))))
+	sc=STATIC;
+      else
+	sc=AUTO;
+      p->o.v=add_var(empty,clone_typ(p->ntyp),sc,p->cl);
+      p->o.v->flags|=DEFINED;
+      p->o.flags=VAR;
+      p->o.reg=0;
+      p->o.val.vmax=l2zm(0L);
+      if(sc==AUTO)
+	init_local_compound(p->o.v);
+      return;
     }
     if(p->flags==IDENTIFIER){
 /*        p->o.v=find_var(p->identifier,0);*/
@@ -622,7 +643,7 @@ void gen_IC(np p,int ltrue,int lfalse)
         gen_IC(p->right,0,0);
         gen_IC(p->left->left,0,0);
         convert(p->right,p->ntyp->flags);
-        insert_bitfield(&p->left->left->o,&p->right->o,&p->o,p->left->bfs,p->left->bfo,p->ntyp->flags&NU);
+        insert_bitfield(&p->left->left->o,&p->right->o,&p->o,p->left->bfs,p->left->bfo,p->ntyp->flags&NU,0);
         return;
       }
       new->code=ASSIGN;
@@ -639,6 +660,7 @@ void gen_IC(np p,int ltrue,int lfalse)
     if(p->flags==ASSIGNOP){
     /*  das hier ist nicht besonders schoen */
       struct obj o,q;struct IC *n;int f;char *libname;
+      np lc;
       if(p->right->right==0){
         /*  sowas wie a+=0 wurde wegoptimiert   */
 	free(new);
@@ -647,7 +669,7 @@ void gen_IC(np p,int ltrue,int lfalse)
       }
 #if HAVE_LIBCALLS
       if(libname=use_libcall(p->right)){
-	np lc;struct Typ *t1,*t2;
+	struct Typ *t1,*t2;
 	t1=clone_typ(p->ntyp);
 	if(p->right->flags==LSHIFT||p->right->flags==RSHIFT){
 	  t2=new_typ();
@@ -655,22 +677,27 @@ void gen_IC(np p,int ltrue,int lfalse)
 	}else
 	  t2=clone_typ(p->ntyp);
 	lc=gen_libcall(libname,p->right->left,t1,p->right->right,t2);
-	*p->right=*lc;
+	/**p->right=*lc;*/
 	o=p->left->o;
-	p->left=0;
-	free(lc);
+	/*p->left=0;*/
+	/*free(lc);*/
       }else
 #endif
 	{
+	  lc=0;
 	  f=do_arith(p->right,new,p->left,&o);
 	  if(!f) ierror(0);
 	  if(f>1) ierror(0);
 	}
       if((o.flags&(SCRATCH|REG))==(SCRATCH|REG)&&!regs[o.reg])
         keep_reg(o.reg);
-      convert(p->right,p->ntyp->flags);
+      if(lc)
+	convert(lc,p->ntyp->flags);
+      else
+	convert(p->right,p->ntyp->flags);
       if(p->left&&p->left->flags==BITFIELD){
-        insert_bitfield(&p->left->left->o,&p->right->o,&p->o,p->left->bfs,p->left->bfo,p->ntyp->flags&NU);
+	if(lc) ierror(0);
+        insert_bitfield(&p->left->left->o,&p->right->o,&p->o,p->left->bfs,p->left->bfo,p->ntyp->flags&NU,0);
         if((p->right->o.flags&(REG|SCRATCH))==(REG|SCRATCH)&&regs[p->right->o.reg])
           free_reg(p->right->o.reg);
         return;
@@ -679,7 +706,11 @@ void gen_IC(np p,int ltrue,int lfalse)
       new->typf=p->ntyp->flags;
       new->q2.flags=0;
       new->code=ASSIGN;
-      new->q1=p->right->o;
+      if(lc){
+	new->q1=lc->o;
+	/*free(lc);*/
+      }else
+	new->q1=p->right->o;
       new->z=o;
       new->q2.val.vmax=szof(p->ntyp);
       p->o=new->z;
@@ -1085,7 +1116,9 @@ void gen_IC(np p,int ltrue,int lfalse)
         if(!(optflags&2)){
           int r;
           for(r=1;r<=MAXR;r++){mregs[r]=regs[r];regs[r]&=~32;}
-        }
+        }else{
+	  gen_IC(p->left,0,0);
+	}
 #ifdef ORDERED_PUSH
         merk_fp=first_pushed;
         first_pushed=0;
@@ -1126,7 +1159,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 	if(optflags&2)
 	  handle_reglist(rl,0);
 #endif
-        if(!r) gen_IC(p->left,0,0);
+        if(!r&&!(optflags&2)) gen_IC(p->left,0,0);
         if(!(p->left->o.flags&DREFOBJ)){
             free(new);
             p->o=p->left->o;
@@ -1461,7 +1494,7 @@ void gen_IC(np p,int ltrue,int lfalse)
             add_IC(new);
         }
         if(p->left->flags==BITFIELD){
-          insert_bitfield(&p->left->left->o,&new->z,&p->o,p->left->bfs,p->left->bfo,p->ntyp->flags);
+          insert_bitfield(&p->left->left->o,&new->z,&p->o,p->left->bfs,p->left->bfo,p->ntyp->flags,0);
           if(p->flags!=POSTINC&&p->flags!=POSTDEC){
             o=p->o;
           }else{
@@ -1915,6 +1948,7 @@ void convert(np p,int f)
 {
   struct IC *new;
   int o=p->ntyp->flags;
+  int to,tn;
   if((f&NQ)==VOID) return;
   if(p->flags==CEXPR||p->flags==PCEXPR){
 #ifdef HAVE_MISRA
@@ -1927,25 +1961,124 @@ void convert(np p,int f)
     p->o.val=p->val;
     return;
   }
+  if((AVOID_FLOAT_TO_UNSIGNED&&ISFLOAT(o)&&(f&UNSIGNED))||
+     (AVOID_UNSIGNED_TO_FLOAT&&ISFLOAT(f)&&(o&UNSIGNED))){
+    union atyps val;
+    int l1,l2,it;
+    struct Var *tmp;
+    np t;
+    struct Typ *ttyp;
+    if(f&UNSIGNED)
+      it=f&NQ;
+    else
+      it=o&NQ;
+    ttyp=clone_typ(p->ntyp);
+    ttyp->flags=f;
+    tmp=add_tmp_var(ttyp);
+    new=new_IC();
+    new->code=COMPARE;
+    new->typf=o;
+    new->q1=p->o;
+    new->q2.flags=KONST;
+    new->q2.val.vumax=t_max[it];
+    eval_const(&new->q2.val,MAXINT|UNSIGNED);
+    insert_const(&new->q2.val,o);
+    val=new->q2.val;
+    add_IC(new);
+    new=new_IC();
+    new->code=BLE;
+    l1=++label;
+    new->typf=l1;
+    add_IC(new);
+    new=new_IC();
+    new->code=SUB;
+    new->typf=o;
+    new->q1=p->o;
+    new->q2.flags=KONST;
+    new->q2.val=val;
+    new->z.flags=VAR;
+    get_scratch(&new->z,o,0,0);
+    t=mymalloc(NODES);
+    t->ntyp=clone_typ(p->ntyp);
+    t->ntyp->flags&=~UNSIGNED;
+    t->o=new->z;
+    add_IC(new);
+    convert(t,f&NQ);
+    new=new_IC();
+    new->code=ADD;
+    new->typf=f;
+    new->q1=t->o;
+    freetyp(t->ntyp);
+    free(t);
+    new->q2.flags=KONST;
+    new->q2.val.vumax=t_max[it];
+    eval_const(&new->q2.val,MAXINT|UNSIGNED);
+    insert_const(&new->q2.val,f);
+    new->z.flags=VAR;
+    new->z.v=tmp;
+    new->z.val.vmax=l2zm(0L);
+    add_IC(new);
+    new=new_IC();
+    new->code=BRA;
+    l2=++label;
+    new->typf=l2;
+    add_IC(new);
+    new=new_IC();
+    new->code=LABEL;
+    new->typf=l1;
+    add_IC(new);
+    p->ntyp->flags&=~UNSIGNED;
+    convert(p,f&NQ);
+    new=new_IC();
+    new->code=ASSIGN;
+    new->typf=f;
+    new->q1=p->o;
+    new->z.flags=VAR;
+    new->z.v=tmp;
+    new->z.val.vmax=l2zm(0L);
+    new->q2.val.vmax=sizetab[f&NQ];
+    p->o=new->z;
+    p->ntyp->flags=f;
+    add_IC(new);
+    new=new_IC();
+    new->code=LABEL;
+    new->typf=l2;
+    add_IC(new);
+    return;
+  }
   if(!volatile_convert&&((o&NU)==(f&NU)||(!must_convert(o,f,const_expr)&&(const_expr||!(optflags&2))))){
     p->ntyp->flags=f;
     if(!ISPOINTER(f)&&!ISARRAY(f)){freetyp(p->ntyp->next);p->ntyp->next=0;}
     return;
   }
+  /* do not create direct converts between float and small types
+     if the backend does not like that */
+  if(ISFLOAT(o)&&ISINT(f)&&(f&NQ)<MIN_FLOAT_TO_INT_TYPE)
+    tn=MIN_FLOAT_TO_INT_TYPE|(f&UNSIGNED);
+  else
+    tn=f;
+  if(ISFLOAT(f)&&ISINT(o)&&(o&NQ)<MIN_INT_TO_FLOAT_TYPE){
+    to=MIN_INT_TO_FLOAT_TYPE|(o&UNSIGNED);
+    convert(p,to);
+  }else{
+    to=o;
+  }
   new=new_IC();
   new->q1=p->o;
   new->q2.flags=0;
   new->code=CONVERT;
-  new->typf2=o;
-  new->typf=f;
-  if((p->o.flags&(SCRATCH|REG))!=(SCRATCH|REG)||!regok(p->o.reg,f,0)){
-    get_scratch(&new->z,f,0,0);
-    p->o=new->z;
-    add_IC(new);
+  new->typf2=to;
+  new->typf=tn;
+  if((p->o.flags&(SCRATCH|REG))!=(SCRATCH|REG)||!regok(p->o.reg,tn,0)){
+    get_scratch(&new->z,tn,0,0);
   }else{
     new->z=p->o;new->z.flags&=~DREFOBJ;
-    p->o=new->z;
-    add_IC(new);
+  }
+  p->o=new->z;
+  add_IC(new);
+  if(f!=tn){
+    p->ntyp->flags=tn;
+    convert(p,f);
   }
 }
 
