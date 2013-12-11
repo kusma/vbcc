@@ -348,6 +348,9 @@ The basic data types are represented like:
                 (If code for another FPU is selected;
                 @option{-fpu=68040} or @option{-fpu=68060} will
                 set @code{__M68882}.)
+        @item __INTSIZE
+                Is set to the size of the @code{int} type.
+                Either 16 (vbccm68ks) or 32 (vbccm68k).
 
 @end table
 
@@ -394,9 +397,6 @@ typedef unsigned char *va_list;
 @section Known problems
 
 @itemize @minus
-    @item Converting floating point values to unsigned integers is not correct
-      if the value is >LONG_MAX and FPU code is generated.
-
     @item The extended precision of the FPU registers can cause problems if
       a program depends on the exact precision. Most programs will not
       have trouble with that, but programs which do exact comparisons

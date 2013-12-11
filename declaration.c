@@ -8,7 +8,7 @@ static char FILE_[]=__FILE__;
 #define PARAMETER 8
 #define OLDSTYLE 16
 
-struct const_list *initialization(struct Typ *,int,int);
+void dynamic_init(struct Var *v,struct Typ *t,struct const_list *cl,zmax of,int noconst);
 int test_assignment(struct Typ *,np);
 int return_sc,return_reg,has_return,return_inline;
 char *return_vattr;
@@ -16,6 +16,9 @@ static int did_return_label;
 #ifdef HAVE_TARGET_ATTRIBUTES
 unsigned long return_tattr;
 #endif
+zmax init_dyn_sz,init_const_sz;
+int init_dyn_cnt,init_const_cnt;
+
 void init_sl(struct struct_list *sl);
 
 #ifdef HAVE_ECPP
@@ -56,6 +59,23 @@ extern np gen_libcall(char *,np,struct Typ *,np,struct Typ *);
 extern int float_used;
 extern void optimize(long,struct Var *);
 
+static void clear_main_ret(void)
+{
+  if(c99&&!strcmp(cur_func,"main")&&ISSCALAR(return_typ->flags)){
+    /* in c99, main returns 0 if it falls from back */
+    struct IC *new=new_IC();
+    new->code=SETRETURN;
+    new->q1.val.vmax=l2zm(0L);
+    eval_const(&new->q1.val,MAXINT);
+    insert_const(&new->q1.val,return_typ->flags&NU);
+    new->q1.flags=KONST;
+    new->typf=return_typ->flags;
+    new->q2.val.vmax=szof(return_typ);
+    new->q2.flags=new->z.flags=0;
+    new->z.reg=freturn(return_typ);
+    add_IC(new);
+  }
+}
 
 static char *get_string(void)
 /* Liest Stringkonstante und liefert Wert als String (malloced) */
@@ -598,7 +618,7 @@ struct Typ *declaration_specifiers(void)
 /* removed */
 #endif
               next_token();killsp();
-              v->clist=initialization(v->vtyp,0,0);
+              v->clist=initialization(v->vtyp,0,0,0,0,0);
               val=zi2zm(v->clist->val.vint);killsp();
             }else{
               if(mode==0) mode=1;
@@ -1603,6 +1623,7 @@ void freevl(void)
     fv->fi->inline_asm=mystrdup(FREEVLA_INLINEASM);
   }
   if(nesting==1){
+    clear_main_ret();
     gen_label(return_label);
     did_return_label=1;
   }
@@ -1693,7 +1714,7 @@ void vla_nesting(struct IC *p,struct Var **vn,int *nest)
   }
 }
 
-static return_vla_nest;
+static int return_vla_nest;
 static struct Var *return_last_vlasp;
 
 /* Find the stack pointer that is needed when jumping to label lab */
@@ -2093,21 +2114,79 @@ struct Var *find_var(char *identifier,int endnesting)
 
 
 
-int check_zero_initialisation(struct const_list* cl, int typ) {
-
-	if (cl->next) return 0;
-	if (cl->tree) return 0;
-	if (cl->other)  {
-		return check_zero_initialisation(cl->other,typ);
-	} else {
-		eval_const(&cl->val,typ);
-		if ( (zmeqto(vmax,l2zm(0L))) && (zumeqto(vumax,ul2zum(0UL))) && (zldeqto(vldouble,d2zld(0.0))) ) {
-			return 1;
-		}
-	}
-	return 0;
+int check_zero_initialisation(struct const_list* cl, int typ) 
+{
+  
+  if (cl->next) return 0;
+  if (cl->tree) return 0;
+  if (cl->other)  {
+    return check_zero_initialisation(cl->other,typ);
+  } else {
+    eval_const(&cl->val,typ);
+    if ( (zmeqto(vmax,l2zm(0L))) && (zumeqto(vumax,ul2zum(0UL))) && (zldeqto(vldouble,d2zld(0.0))) ) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
+/* decide whether a initialization shall be performed only be generated code
+   or if a table copy should be used first */
+int use_only_dyn_init(zmax sz,zmax dyn_sz,zmax const_sz,int dyn_cnt,int const_cnt)
+{
+  if(zmleq(sz,l2zm(32L)))
+    return 1;
+  if(zmeqto(dyn_sz,l2zm(0L)))
+    return 0;
+  if(!zmleq(zmdiv(sz,dyn_sz),l2zm(2L)))
+    return 0;
+  else
+    return 1;
+}
+
+void init_local_compound(struct Var *v)
+{
+  if(v->storage_class==AUTO||v->storage_class==REGISTER){
+    struct IC *new;
+    /*  Initialisierung von auto-Variablen  */
+    new=new_IC();
+    new->code=ASSIGN;
+    new->typf=v->vtyp->flags;
+    new->q2.flags=0;
+    new->q2.val.vmax=szof(v->vtyp);
+    new->z.flags=VAR;
+    new->z.v=v;
+    new->z.val.vmax=l2zm(0L);
+    if(v->clist->tree){
+      /*  einzelner Ausdruck  */
+      gen_IC(v->clist->tree,0,0);
+      convert(v->clist->tree,v->vtyp->flags&NU);
+      new->q1=v->clist->tree->o;
+      add_IC(new);
+      /*                        v->clist=0;*/
+    }else{
+      /*  Array etc.  */
+      struct Var *nv;
+      if(!use_only_dyn_init(szof(v->vtyp),init_dyn_sz,init_const_sz,init_dyn_cnt,init_const_cnt)){
+	nv=add_var(empty,clone_typ(v->vtyp),STATIC,v->clist);
+	nv->flags|=DEFINED;
+	nv->dfilename=filename;
+	nv->dline=line;
+	nv->vtyp->flags|=CONST;
+	/*                        v->clist=0;*/
+	new->q1.flags=VAR;
+	new->q1.v=nv;
+	new->q1.val.vmax=l2zm(0L);
+	
+	add_IC(new);
+	
+	dynamic_init(v,v->vtyp,v->clist,0,1);
+      }else{
+	dynamic_init(v,v->vtyp,v->clist,0,0);
+      }
+    }   
+  }
+}
 
 #ifdef HAVE_MISRA
 /* removed */
@@ -2388,7 +2467,11 @@ void var_declaration(void)
 /* removed */
 /* removed */
 #endif
-      v->clist=initialization(v->vtyp,v->storage_class==AUTO||v->storage_class==REGISTER,0);
+      init_dyn_sz=l2zm(0L);
+      init_dyn_cnt=0;
+      init_const_sz=l2zm(0L);
+      init_const_cnt=0;
+      v->clist=initialization(v->vtyp,v->storage_class==AUTO||v->storage_class==REGISTER,0,0,0,0);
                 /* MISRA Rule 9.2 violation checking and error reporting */
 #ifdef HAVE_MISRA
 /* removed */
@@ -2401,44 +2484,16 @@ void var_declaration(void)
       if(v->clist){
         if(ISARRAY(v->vtyp->flags)&&zmeqto(v->vtyp->size,l2zm(0L))){
           struct const_list *p=v->clist;
-          while(p){v->vtyp->size=zmadd(v->vtyp->size,l2zm(1L));p=p->next;}
+          while(p){v->vtyp->size=zmadd(p->idx,l2zm(1L));p=p->next;}
           if(v->storage_class==AUTO||v->storage_class==REGISTER){
             local_offset[nesting]=zmadd(local_offset[nesting],szof(v->vtyp));
             if(zmleq(max_offset,local_offset[nesting])) max_offset=local_offset[nesting];
           }
         }
         if(v->storage_class==AUTO||v->storage_class==REGISTER){
-          struct IC *new;
-          /*  Initialisierung von auto-Variablen  */
-          new=new_IC();
-          new->code=ASSIGN;
-          new->typf=v->vtyp->flags;
-          new->q2.flags=0;
-          new->q2.val.vmax=szof(v->vtyp);
-          new->z.flags=VAR;
-          new->z.v=v;
-          new->z.val.vmax=l2zm(0L);
-          if(v->clist->tree){
-            /*  einzelner Ausdruck  */
-            gen_IC(v->clist->tree,0,0);
-            convert(v->clist->tree,v->vtyp->flags&NU);
-            new->q1=v->clist->tree->o;
-            /*                        v->clist=0;*/
-          }else{
-            /*  Array etc.  */
-            struct Var *nv;
-            nv=add_var(empty,clone_typ(v->vtyp),STATIC,v->clist);
-            nv->flags|=DEFINED;
-            nv->dfilename=filename;
-            nv->dline=line;
-            nv->vtyp->flags|=CONST;
-            /*                        v->clist=0;*/
-            new->q1.flags=VAR;
-            new->q1.v=nv;
-            new->q1.val.vmax=l2zm(0L);
-          }
-          add_IC(new);
-          /*                    if(v->clist&&v->clist->tree){free_expression(v->clist->tree);v->clist->tree=0;}*/
+
+	  init_local_compound(v);
+
         }else if(c_flags[19]&USEDFLAG){
           /*  Ohne Optimierung gleich erzeugen; das ist noch  */
           /*  etwas von der genauen Implementierung der Liste */
@@ -2480,7 +2535,7 @@ void var_declaration(void)
     }
     cur_func=v->identifier;
     if(only_inline==2) only_inline=0;
-    if(nesting<1) ierror(0);
+    if(nesting<1) enter_block();
     if(nesting>1) error(32);
     if(v->flags&DEFINED){
       if(!inline_flag||!cross_module){
@@ -2706,8 +2761,10 @@ void var_declaration(void)
     for(i=1;i<=MAXR;i++) if(regs[i]!=regsa[i]) {printf("Register %s:\n",regnames[i]);ierror(0);}
     }
 #endif
-    if(!did_return_label)
+    if(!did_return_label){
+      clear_main_ret();
       gen_label(return_label);
+    }
     /* backpatch code for jumps out of vla-scope if necessary */
     if(vlas)
       vla_jump_fix();
@@ -2946,61 +3003,84 @@ void gen_vars(struct Var *v)
     }
   }
 }
-void gen_clist(FILE *f,struct Typ *t,struct const_list *cl)
-/*  Generiert dc fuer const_list.                           */
+
+/* creates code that dynamically initializes a variable */
+void dynamic_init(struct Var *v,struct Typ *t,struct const_list *cl,zmax of,int noconst)
 {
-  int i,bfo,bfs;zmax sz;zumax bfval=ul2zum(0UL);
-  if(ISARRAY(t->flags)){
-    for(sz=l2zm(0L);!zmleq(t->size,sz)&&cl;sz=zmadd(sz,l2zm(1L)),cl=cl->next){
-      if(!cl->other){ierror(0);return;}
-      gen_clist(f,t->next,cl->other);
+  int f=t->flags;
+  if(ISARRAY(f)){
+    zmax i;
+    for(i=l2zm(0L);!zmleq(t->size,i);i=zmadd(i,l2zm(1L))){
+      if(cl&&zmeqto(cl->idx,i)){
+	dynamic_init(v,t->next,cl->other,of,noconst);
+	cl=cl->next;
+      }else{
+	dynamic_init(v,t->next,0,of,noconst);
+      }
+      of=zmadd(of,szof(t->next));
     }
-    if(!zmleq(t->size,sz)) gen_ds(f,zmmult(zmsub(t->size,sz),szof(t->next)),t->next);
-    return;
-  }
-  if(ISUNION(t->flags)){
-    gen_clist(f,(*t->exact->sl)[0].styp,cl);
-    sz=zmsub(szof(t),szof((*t->exact->sl)[0].styp));
-    if(!zmeqto(sz,l2zm(0L))) gen_ds(f,sz,0);
-    return;
-  }
-  if(ISSTRUCT(t->flags)){
+  }else if(ISUNION(f)&&(!cl||!cl->tree)){
+    dynamic_init(v,(*t->exact->sl)[cl?zm2l(cl->idx):0].styp,cl?cl->other:0,of,noconst);
+  }else if(ISSTRUCT(f)&&(!cl||!cl->tree)){
     zmax al;int fl;struct Typ *st;
-    sz=l2zm(0L);
+    int bfo,i;
     for(i=0;i<t->exact->count&&cl;i++){
       if(!cl->other){ierror(0);return;}
       st=(*t->exact->sl)[i].styp;
       al=(*t->exact->sl)[i].align;
-      if(!zmeqto(zmmod(sz,al),l2zm(0L))){
-        gen_ds(f,zmsub(al,zmmod(sz,al)),0);
-        sz=zmadd(sz,zmsub(al,zmmod(sz,al)));
-      }
       if(!(*t->exact->sl)[i].identifier) ierror(0);
       bfo=(*t->exact->sl)[i].bfoffset;
+      if(!zmeqto(zmmod(of,al),l2zm(0L))){
+        of=zmadd(of,zmsub(al,zmmod(of,al)));
+      }
       if(bfo>=0){
+	int bfs=(*t->exact->sl)[i].bfsize;
+	static struct obj dest = {0};
+	  
+	dest.flags=VAR;
+	dest.v=v;
+	dest.val.vmax=of;
+
+	if(bfo==0){
+	  /* first clear entire bitfield */
+	  struct IC *new=new_IC();
+	  new->code=ASSIGN;
+	  new->z=dest;
+	  new->typf=st->flags;
+	  new->q2.val.vmax=sizetab[st->flags&NQ];
+	  new->q1.flags=KONST;
+	  new->q1.val.vmax=l2zm(0L);
+	  eval_const(&new->q1.val,MAXINT);
+	  insert_const(&new->q1.val,st->flags&NU);
+	  add_IC(new);
+	}
+
 	/* bitfield */
-	if((*t->exact->sl)[i].identifier[0]){
-          bfs=(*t->exact->sl)[i].bfsize;
-          eval_const(&cl->other->val,st->flags);
-          vumax=zumand(vumax,zumsub(zumlshift(ul2zum(1UL),ul2zum((unsigned long)bfs)),ul2zum(1UL)));
-          bfval=zumor(bfval,zumlshift(vumax,ul2zum((unsigned long)bflayout(bfo,bfs,st->flags))));
+	if(!zmeqto(cl->idx,l2zm(i))||!cl->other){
+	  /* nothing to do, initialized before */
+	}else if(cl->other->tree){
+	  struct obj dummy;
+	  gen_IC(cl->other->tree,0,0);
+	  convert(cl->other->tree,st->flags);
+	  insert_bitfield(&dest,&cl->other->tree->o,&cl->other->tree->o,bfs,bfo,st->flags,1);
 	  cl=cl->next;
-	}          
+	}else{
+	  static struct obj val = {0};
+	  val.flags=KONST;
+	  val.val=cl->other->val;
+	  insert_bitfield(&dest,&val,&val,bfs,bfo,st->flags,1);
+	  cl=cl->next;
+	}
 	if(i+1>=t->exact->count||(*t->exact->sl)[i+1].bfoffset<=0||!cl){
-	  /* last bitfield in integer */
-	  struct const_list bfcl;
-	  gval.vumax=bfval;
-	  eval_const(&gval,UNSIGNED|MAXINT);
-	  insert_const(&bfcl.val,st->flags&NU);
-	  bfcl.tree=0;
-	  gen_dc(f,st->flags&NU,&bfcl);
-	  bfval=ul2zum(0L);
-	  sz=zmadd(sz,szof(st));
+	  of=zmadd(of,szof(st));
 	}
       }else{
-	gen_clist(f,st,cl->other);
-        sz=zmadd(sz,szof(st));
-	cl=cl->next;
+	if(zmeqto(l2zm((long)i),cl->idx)){
+	  dynamic_init(v,st,cl->other,of,noconst);
+	  cl=cl->next;
+	}else
+	  dynamic_init(v,st,0,of,noconst);
+        of=zmadd(of,szof(st));
       }
     }
     for(;i<t->exact->count;i++){
@@ -3008,28 +3088,245 @@ void gen_clist(FILE *f,struct Typ *t,struct const_list *cl)
       al=(*t->exact->sl)[i].align;
       bfo=(*t->exact->sl)[i].bfoffset;
       if(bfo>0) continue;
-      if(!zmeqto(zmmod(sz,al),l2zm(0L))){
-        gen_ds(f,zmsub(al,zmmod(sz,al)),0);
-        sz=zmadd(sz,zmsub(al,zmmod(sz,al)));
+      if(!zmeqto(zmmod(of,al),l2zm(0L))){
+        of=zmadd(of,zmsub(al,zmmod(of,al)));
       }
-      gen_ds(f,szof((*t->exact->sl)[i].styp),(*t->exact->sl)[i].styp);
-      sz=zmadd(sz,szof(st));
+      dynamic_init(v,st,0,of,noconst);
+      of=zmadd(of,szof(st));
+    }
+  }else{
+    struct IC *new;
+    if(noconst&&(!cl||!cl->tree))
+      return;
+    new=new_IC();
+    new->code=ASSIGN;
+    new->z.flags=VAR;
+    new->z.v=v;
+    new->z.val.vmax=of;
+    new->typf=t->flags;
+    new->q2.val.vmax=szof(t);
+    if(!cl){
+      new->q1.flags=KONST;
+      gval.vmax=l2zm(0L);
+      eval_const(&gval,MAXINT);
+      insert_const(&new->q1.val,t->flags&NU);
+    }else if(cl->tree){
+      gen_IC(cl->tree,0,0);
+      if(ISSCALAR(t->flags))
+	convert(cl->tree,t->flags);
+      new->q1=cl->tree->o;
+    }else{
+      new->q1.flags=KONST;
+      new->q1.val=cl->val;
+    }
+    add_IC(new);
+  }
+}
+
+
+void gen_clist(FILE *f,struct Typ *t,struct const_list *cl)
+/*  Generiert dc fuer const_list.                           */
+{
+  int i,bfo,bfs;zmax sz;zumax bfval=ul2zum(0UL);
+  if(ISARRAY(t->flags)){
+    for(sz=l2zm(0L);!zmleq(t->size,sz)&&cl;cl=cl->next){
+      if(!cl->other){ierror(0);return;}
+      if(!zmeqto(sz,cl->idx))
+	gen_ds(f,zmmult(zmsub(cl->idx,sz),szof(t->next)),t->next);
+
+      gen_clist(f,t->next,cl->other);
+      sz=zmadd(cl->idx,l2zm(1L));
+    }
+    if(!zmleq(t->size,sz)) gen_ds(f,zmmult(zmsub(t->size,sz),szof(t->next)),t->next);
+    return;
+  }
+  if(ISUNION(t->flags)){
+    int i=zm2l(cl->idx);
+    if(cl&&cl->tree){
+      /* union initialized by another union */
+      gen_ds(f,szof(t),t);
+    }else{
+      gen_clist(f,(*t->exact->sl)[i].styp,cl->other);
+      sz=zmsub(szof(t),szof((*t->exact->sl)[i].styp));
+      if(!zmeqto(sz,l2zm(0L))) gen_ds(f,sz,0);
+    }
+    return;
+  }
+  if(ISSTRUCT(t->flags)){
+    zmax al;int fl;struct Typ *st;
+    sz=l2zm(0L);
+    if(cl&&cl->tree){
+      /* struct initialized by another struct */
+      gen_ds(f,szof(t),t);
+      sz=zmadd(sz,szof(t));
+    }else{
+      for(i=0;i<t->exact->count&&cl;i++){
+	if(!cl->other){ierror(0);return;}
+	st=(*t->exact->sl)[i].styp;
+	al=(*t->exact->sl)[i].align;
+	if(!(*t->exact->sl)[i].identifier) ierror(0);
+	bfo=(*t->exact->sl)[i].bfoffset;
+	if(!zmeqto(zmmod(sz,al),l2zm(0L))){
+	  gen_ds(f,zmsub(al,zmmod(sz,al)),0);
+	  sz=zmadd(sz,zmsub(al,zmmod(sz,al)));
+	}
+	if(bfo>=0){
+	  /* bitfield */
+	  if((*t->exact->sl)[i].identifier[0]){
+	    bfs=(*t->exact->sl)[i].bfsize;
+	    if(zmeqto(l2zm((long)i),cl->idx)){
+	      eval_const(&cl->other->val,st->flags);
+	      cl=cl->next;
+	    }else{
+	      vumax=ul2zum(0UL);
+	    }
+	    vumax=zumand(vumax,zumsub(zumlshift(ul2zum(1UL),ul2zum((unsigned long)bfs)),ul2zum(1UL)));
+	    bfval=zumor(bfval,zumlshift(vumax,ul2zum((unsigned long)bflayout(bfo,bfs,st->flags))));
+	  }          
+	  if(i+1>=t->exact->count||(*t->exact->sl)[i+1].bfoffset<=0||!cl){
+	    /* last bitfield in integer */
+	    struct const_list bfcl;
+	    gval.vumax=bfval;
+	    eval_const(&gval,UNSIGNED|MAXINT);
+	    insert_const(&bfcl.val,st->flags&NU);
+	    bfcl.tree=0;
+	    gen_dc(f,st->flags&NU,&bfcl);
+	    bfval=ul2zum(0L);
+	    sz=zmadd(sz,szof(st));
+	  }
+	}else{
+	  if(zmeqto(l2zm((long)i),cl->idx)){
+	    gen_clist(f,st,cl->other);
+	    cl=cl->next;
+	  }else
+	    gen_ds(f,szof(st),st);
+	  sz=zmadd(sz,szof(st));
+	}
+      }
+      for(;i<t->exact->count;i++){
+	st=(*t->exact->sl)[i].styp;
+	al=(*t->exact->sl)[i].align;
+	bfo=(*t->exact->sl)[i].bfoffset;
+	if(bfo>0) continue;
+	if(!zmeqto(zmmod(sz,al),l2zm(0L))){
+	  gen_ds(f,zmsub(al,zmmod(sz,al)),0);
+	  sz=zmadd(sz,zmsub(al,zmmod(sz,al)));
+	}
+	gen_ds(f,szof((*t->exact->sl)[i].styp),(*t->exact->sl)[i].styp);
+	sz=zmadd(sz,szof(st));
+      }
     }
     al=falign(t);
     if(!zmeqto(zmmod(sz,al),l2zm(0L)))
       gen_ds(f,zmsub(al,zmmod(sz,al)),0);
     return;
   }
+
   if(cl->tree) cl->tree->o.am=0;
-  
-  gen_dc(f,t->flags&NU,cl);
+
+  if(zmeqto(cl->idx,l2zm(-1L)))
+    gen_ds(f,szof(t),t);
+  else
+    gen_dc(f,t->flags&NU,cl);
 }
 
+/* finds the correct place in a const list to insert new initializer */
+struct const_list *insert_cl(struct const_list *old,zmax idx)
+{
+  struct const_list *p,*cl=0;
+  if(old&&zmleq(old->idx,idx)){
+    p=old;
+    do{
+      if(zmeqto(p->idx,idx)){
+	/* found existing entry */
+	cl=p;
+	break;
+      }
+      if(!p->next||!zmleq(p->next->idx,idx))
+	break;
+      p=p->next;
+    }while(p);
+  }else
+    p=0;
+  /* we need a new entry */
+  if(!cl){
+    cl=mymalloc(CLS);
+    cl->tree=0;
+    cl->other=0;
+    cl->idx=idx;
+    if(p){
+      cl->next=p->next;
+      p->next=cl;
+    }else
+      cl->next=old;
+  }
+  return cl;
+}
 
-struct const_list *initialization(struct Typ *t,int noconst,int level)
+struct const_list *designator(struct Typ *t,struct const_list *cl)
+{
+  int f=t->flags&NQ;
+  np tree;
+  if(!c99) return 0;
+  if(ISARRAY(f)&&ctok->type==LBRK){
+    next_token();
+    killsp();
+    tree=expression();
+    if(ctok->type!=RBRK)
+      error(62);
+    else
+      {next_token();killsp();}
+    if(!type_expression(tree)){
+      /*                    error("incorrect constant expression");*/
+    }else{
+      if(tree->sidefx) error(60);
+      if(tree->flags!=CEXPR||!ISINT(tree->ntyp->flags)){
+	error(19);
+      }else{
+	/* check index for valid range */
+	eval_constn(tree);
+	if(!zmleq(l2zm(0L),vmax)) {error(354);vmax=l2zm(0L);}
+	if(!zmeqto(t->size,l2zm(0L))&&zmleq(t->size,vmax)) {error(354);vmax=l2zm(0L);}
+
+	cl=insert_cl(cl,vmax);
+
+	return cl;
+      }
+    }
+  }else if((ISSTRUCT(f)||ISUNION(f))&&ctok->type==DOT){
+    next_token();
+    killsp();
+    if(ctok->type!=NAME){
+      error(53);
+    }else{
+      int i,n=-1;
+      for(i=0;i<t->exact->count;i++)
+	if(!strcmp((*t->exact->sl)[i].identifier,ctok->name)) n=i;
+      if(n<0){
+	error(23,ctok->name);
+	return 0;
+      }
+      next_token();
+      killsp();
+
+      if(!ISUNION(f)||!cl)
+	cl=insert_cl(cl,l2zm((long)n));
+
+      return cl;
+    }
+  }
+  return 0;
+}
+
+struct const_list *initialization(struct Typ *t,int noconst,int level,int desi,struct struct_declaration *fstruct,struct const_list *first)
 /*  Traegt eine Initialisierung in eine const_list ein.         */
 {
-  struct const_list *first,*cl,**prev;np tree,tree2;int bracket;zmax i;
+  struct const_list *cl,**prev;
+  np tree,tree2;
+  int bracket,desi_follows=0;
+  zmax i;
+  struct token mtok;
+  
   int f=t->flags&NQ;
   if(ISFUNC(f)){error(42);return(0);}
   if(ctok->type==LBRA){next_token();killsp();bracket=1;} else bracket=0;
@@ -3037,25 +3334,59 @@ struct const_list *initialization(struct Typ *t,int noconst,int level)
 #ifdef HAVE_MISRA
 /* removed */
 #endif
-    if(ctok->type==T_STRING&&t->next&&(t->next->flags&NQ)==CHAR){
+    if(t->dsize){
+      error(358);
+    }else if(zmeqto(t->size,l2zm(0L))&&level!=0){
+      error(359);
+    }else if(ctok->type==T_STRING&&t->next&&(t->next->flags&NQ)==CHAR){
       killsp();
       tree=string_expression();
       first=tree->cl;
       free_expression(tree);
     }else{
-      prev=0;
+      struct const_list *last=first;
       if(level==0&&!bracket) error(157);
-      for(i=l2zm(0L);(zmeqto(t->size,l2zm(0L))||!zmleq(t->size,i))&&ctok->type!=RBRA;i=zmadd(i,l2zm(1L))){
+      for(i=l2zm(0L);desi_follows||((zmeqto(t->size,l2zm(0L))||!zmleq(t->size,i)||ctok->type==LBRK)&&ctok->type!=RBRA);i=zmadd(i,l2zm(1L))){
         if(!zmleq(i,0)){
           if(ctok->type==COMMA){next_token();killsp();} else break;
           if(ctok->type==RBRA) break;
         }
-        cl=mymalloc(CLS);
-        cl->next=0;cl->tree=0;
-        cl->other=initialization(t->next,0,level+1);
+	/* check for first designated initializer */
+	cl=designator(t,first);
+	if(!cl){
+	  /* no designator */
+	  cl=insert_cl(last,i);
+	  cl->other=initialization(t->next,c99?noconst:0,level+1,0,fstruct,cl->other);
+	  if(cl->other&&zmeqto(cl->other->idx,l2zm(-2L))){
+	    first=cl->other;
+	    first->other=0;
+	    break;
+	  }
+	}else{
+	  /* designator: store current object and handle remaining designators */
+	  i=cl->idx;
+	  if(ctok->type!=ASGN){
+	    if(ctok->type!=LBRK&&ctok->type!=DOT)
+	      error(355);
+	  }else{
+	    cl->other=0;
+	    next_token();killsp();
+	  }
+	  cl->other=initialization(t->next,c99?noconst:0,level+1,1,fstruct,cl->other);
+	}
+	if(cl->next==first) first=cl;
+	last=cl;
         killsp();
-        if(prev) *prev=cl; else first=cl;
-        prev=&cl->next;
+	if(desi&&!bracket)
+	  break;
+	desi_follows=0;
+	if(ctok->type==COMMA){
+	  copy_token(&mtok,ctok);
+	  next_token();killsp();
+	  if(ctok->type==LBRK)
+	    desi_follows=1;
+	  push_token(&mtok);
+	}
       }
 #ifdef HAVE_MISRA
 /* removed */
@@ -3064,25 +3395,59 @@ struct const_list *initialization(struct Typ *t,int noconst,int level)
 /* removed */
 #endif
     }
-  }else if(ISSTRUCT(f)&&(bracket||!noconst)){
+  }else if(ISSTRUCT(f)&&(bracket||!noconst||c99)){
     if(t->exact->count<=0)
       {error(43);return(0);}
 #ifdef HAVE_ECPP
 /* removed */
 #endif
     prev=0;
-    if(level==0&&!bracket) error(157);
-    for(i=l2zm(0L);!zmleq(t->exact->count,i)&&ctok->type!=RBRA;i=zmadd(i,l2zm(1L))){
-      if((*t->exact->sl)[zm2l(i)].identifier[0]==0) continue; /* unnamed bitfield */
+    if(level==0&&!bracket&&!c99) error(157);
+    for(i=l2zm(0L);desi_follows||(!zmleq(t->exact->count,i)&&ctok->type!=RBRA);i=zmadd(i,l2zm(1L))){
+      if(!desi_follows&&(*t->exact->sl)[zm2l(i)].identifier[0]==0) continue; /* unnamed bitfield */
       if(!zmleq(i,0)){
         if(ctok->type==COMMA){next_token();killsp();} else break;
         if(ctok->type==RBRA) break;
       }
-      cl=mymalloc(CLS);
-      cl->next=0;cl->tree=0;
-      cl->other=initialization((*t->exact->sl)[zm2l(i)].styp,0,level+1);
-      if(prev) *prev=cl; else first=cl;
-      prev=&cl->next;
+      cl=designator(t,first);
+
+      if(!cl){
+	cl=insert_cl(first,l2zm((long)i));
+	cl->other=initialization((*t->exact->sl)[zm2l(i)].styp,c99?noconst:0,level+1,0,!fstruct&&!bracket&&zmeqto(i,l2zm(0L))?t->exact:fstruct,cl->other);
+	if(cl->other&&zmeqto(cl->other->idx,l2zm(-2L))){
+	  if(fstruct){
+	    first=cl->other;
+	    first->other=0;
+	  }else{
+	    *cl=*cl->other;
+	    cl->idx=l2zm(-1L);
+	    cl->other=0;
+	    first=cl;
+	  }
+	  break;
+	}
+      }else{
+	i=zm2l(cl->idx);
+	if(ctok->type!=ASGN){
+	  if(ctok->type!=LBRK&&ctok->type!=DOT)
+	    error(355);
+	}else{
+	  next_token();killsp();
+	  cl->other=0;
+	}
+	cl->other=initialization((*t->exact->sl)[zm2l(i)].styp,c99?noconst:0,level+1,1,fstruct,cl->other);
+      }
+      if(cl->next==first) first=cl;
+      if(desi&&!bracket)
+	break;
+      desi_follows=0;
+      if(ctok->type==COMMA){
+	copy_token(&mtok,ctok);
+	next_token();killsp();
+	if(ctok->type==DOT)
+	  desi_follows=1;
+	push_token(&mtok);
+      }
     }
 #ifdef HAVE_MISRA
 /* removed */
@@ -3091,18 +3456,74 @@ struct const_list *initialization(struct Typ *t,int noconst,int level)
 /* removed */
 #endif
 
-  }else if(ISUNION(f)&&(bracket||!noconst)){
+  }else if(ISUNION(f)&&(c99||bracket||!noconst)){
     if(t->exact->count<=0)
       {error(44);return(0);}
-    first=initialization((*t->exact->sl)[0].styp,0,level+1);
+
+    if(level==0&&!bracket&&!c99) error(157);
+    desi_follows=1;
+    while(desi_follows){
+      cl=designator(t,0);
+
+      if(!cl){
+	cl=insert_cl(first,l2zm((long)0));
+	cl->other=initialization((*t->exact->sl)[0].styp,c99?noconst:0,level+1,0,!fstruct&&!bracket?t->exact:fstruct,cl->other);
+	if(cl->other&&zmeqto(cl->other->idx,l2zm(-2L))){
+	  if(fstruct){
+	    first=cl->other;
+	    first->other=0;
+	  }else{
+	    *cl=*cl->other;
+	    cl->other=0;
+	    cl->idx=l2zm(-1L);
+	    first=cl;
+	  }
+	  break;
+	}
+      }else{
+	i=zm2l(cl->idx);
+	if(ctok->type!=ASGN){
+	  if(ctok->type!=LBRK&&ctok->type!=DOT)
+	    error(355);
+	}else{
+	  next_token();killsp();
+	  cl->other=0;
+	}
+	cl->other=initialization((*t->exact->sl)[zm2l(i)].styp,c99?noconst:0,level+1,1,fstruct,cl->other);
+      }
+      first=cl;
+      if(desi&&!bracket)
+	break;
+      desi_follows=0;
+      if(ctok->type==COMMA){
+	copy_token(&mtok,ctok);
+	next_token();killsp();
+	if(ctok->type==DOT)
+	  desi_follows=1;
+	else
+	  push_token(&mtok);
+      }
+    }
   }else{
     int oldconst=const_expr;
     tree2=tree=assignment_expression();
+
     if(!tree){error(45);return(0);}
     if(!noconst) const_expr=1;
     if(!type_expression(tree)){free_expression(tree); const_expr=oldconst;return 0;}
     const_expr=oldconst;
+
     tree=makepointer(tree);
+
+    /* check for complete struct assignment in dynamic initialization */
+    if(noconst&&(ISSTRUCT(tree->ntyp->flags)||ISUNION(tree->ntyp->flags))&&fstruct==tree->ntyp->exact){
+      first=mymalloc(CLS);
+      first->tree=tree;
+      first->next=first->other=0;
+      first->idx=l2zm(-2L);
+      return first;
+    }
+
     if(!test_assignment(t,tree)){free_expression(tree); return 0;}
     if(!noconst){
       /*  nur Konstanten erlaubt (bei Arrays/Strukturen etc. oder static) */
@@ -3121,6 +3542,7 @@ struct const_list *initialization(struct Typ *t,int noconst,int level)
           first=mymalloc(CLS);
           first->next=first->other=0;
           first->tree=tree;
+	  first->idx=l2zm(0L);
           killsp();
         }else{
           free_expression(tree);error(46);
@@ -3128,6 +3550,7 @@ struct const_list *initialization(struct Typ *t,int noconst,int level)
         }
       }else{
         first=mymalloc(CLS);
+	first->idx=l2zm(0L);
         first->next=first->other=0;
         first->tree=0;
         eval_constn(tree);
@@ -3143,6 +3566,26 @@ struct const_list *initialization(struct Typ *t,int noconst,int level)
       first->next=first->other=0;
       first->tree=tree;
       killsp();
+      if(!tree->sidefx){
+	if(tree->flags==CEXPR){
+	  eval_constn(tree);
+	  tree->ntyp->flags=t->flags;
+	  insert_constn(tree);
+	  first->val=tree->val;
+	  first->tree=0;
+	  first->idx=l2zm(0L);
+	  init_const_sz=zmadd(init_const_sz,szof(tree->ntyp));
+	  init_const_cnt++;
+	  free_expression(tree2);
+	}else{
+	  first->idx=l2zm(-1L);
+	  init_dyn_sz=zmadd(init_dyn_sz,szof(tree->ntyp));
+	  init_dyn_cnt++;
+	}
+      }else{
+	init_dyn_sz=zmadd(init_dyn_sz,szof(tree->ntyp));
+	init_dyn_cnt++;
+      }
     }
   }
   if(bracket){

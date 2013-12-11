@@ -1,5 +1,9 @@
 /*  $VER: vbcc (vars.c) V0.8    */
 #include "vbc.h"
+#ifdef AMIGA
+static const char *__ver="$VER: vbcc 0.9b (19.05.2011)\r\n";
+long __stack=65536;
+#endif
 char *s,*ident;
 char number[MAXI],buff[MAXI];
 struct tunit *first_tunit,*last_tunit;
@@ -80,4 +84,4 @@ struct ecpp_dtor_list *ecpp_dlist[MAXN];
 #endif
 
 char *cur_func="shouldn't happen!";
-char *copyright="vbcc V0.9a (c) in 1995-2009 by Volker Barthelmann";
+char *copyright="vbcc V0.9b (c) in 1995-2011 by Volker Barthelmann";

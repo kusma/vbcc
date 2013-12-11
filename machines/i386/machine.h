@@ -162,7 +162,14 @@ struct AddressingMode{
 /* support for variable-length arrays */
 #define ALLOCVLA_REG 1
 #define ALLOCVLA_INLINEASM "\tsubl\t%eax,%esp\n\tandl\t$-5,%esp\n\tmovl\t%esp,%eax"
-#define FREEVLA_REG 1
-#define FREEVLA_INLINEASM "\tmovl\t%eax,%esp"
+/* TODO: find a better solution some time */
+#define FREEVLA_REG 0
+#define FREEVLA_INLINEASM "\tmovl\t(%esp),%esp\n\tsubl\t$4,%esp"
 #define OLDSPVLA_INLINEASM "\tmovl\t%esp,%eax"
 #define FPVLA_REG 7
+
+/* do not create CONVERT_ICs from floats to unsigned integers */
+#define AVOID_FLOAT_TO_UNSIGNED 1
+
+/* do not create CONVERT_ICs from unsigned integers to floats */
+#define AVOID_UNSIGNED_TO_FLOAT 1

@@ -182,7 +182,7 @@ struct flowgraph *construct_flowgraph(void)
                 if(iseq[l-firstl]) p->typf=l=iseq[l-firstl];
                 /*  in Flussgraph eintragen */
                 g->branchout=lg[l-firstl];
-                if(!lg[l-firstl]) ierror(0);
+                if(!lg[l-firstl]) error(353);
                 lp=lg[l-firstl]->in;
                 /*  das hier sollte man noch schoener machen    */
                 if(!lp){
@@ -506,9 +506,9 @@ struct flowgraph *jump_optimization(void)
                    !compare_objs(&as->z,&bs->z,as->typf)){
                     i=0;
                     for(lp=a->in;lp;lp=lp->next)
-                        if(lp->graph&&lp->graph!=g&&(!lp->graph->end||lp->graph->end->code!=BRA)) i=1;
+                        if(lp->graph&&lp->graph!=g&&(lp->graph->branchout==a||!lp->graph->end||lp->graph->end->code!=BRA)) i=1;
                     for(lp=b->in;lp;lp=lp->next)
-                        if(lp->graph&&lp->graph!=g&&(!lp->graph->end||lp->graph->end->code!=BRA)) i=1;
+                        if(lp->graph&&lp->graph!=g&&(lp->graph->branchout==b||!lp->graph->end||lp->graph->end->code!=BRA)) i=1;
                     if(!i){
                         if(!(tp=g->end->prev)) ierror(0);
                         if(tp->code!=TEST&&tp->code!=COMPARE)

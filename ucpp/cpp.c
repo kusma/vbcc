@@ -240,7 +240,7 @@ static void init_found_files(void)
 /*
  * convert a Unix-style path for the host architecture
  */
-#ifdef MSDOS
+#if defined(MSDOS) || defined(ATARI)
 static char *convert_path(char *path)
 {
 	/* on msdos systems, replace all / by \ */
@@ -590,7 +590,7 @@ static FILE *find_file(char *name, int localdir)
 			: current_filename;
 
 		for (i = strlen(rfn) - 1; i >= 0; i --)
-#ifdef MSDOS
+#if defined(MSDOS) || defined(ATARI)
 			if (rfn[i] == '\\') break;
 #elif defined AMIGA
 			if (rfn[i] == '/' || rfn[i] == ':') break;
@@ -598,7 +598,7 @@ static FILE *find_file(char *name, int localdir)
 			if (rfn[i] == '/') break;
 #endif
 
-#if defined MSDOS
+#if defined(MSDOS) || defined(ATARI)
 		if (i >= 0 && *name != '\\' && (nl < 2 || name[1] != ':'))
 #elif defined AMIGA
 		if (i >= 0 && strchr(name,':') == 0)
@@ -1153,7 +1153,7 @@ do_include_next:
 	      misra_neu(88,19,2,-1);
 	}
 #endif
-#if defined(MSDOS) || defined(AMIGA)
+#if defined(MSDOS) || defined(ATARI) || defined(AMIGA)
 	{
 		char *conv_fname = convert_path(fname);
 		freemem(fname);
@@ -1968,7 +1968,7 @@ void init_include_path(char *incpath[])
 		int i;
 
 		for (i = 0; incpath[i]; i ++) {
-#if defined(MSDOS) || defined(AMIGA)
+#if defined(MSDOS) || defined(ATARI) || defined(AMIGA)
 			aol(include_path, include_path_nb, convert_path(incpath[i]), INCPATH_MEMG);
 #else
 			aol(include_path, include_path_nb, sdup(incpath[i]), INCPATH_MEMG);
@@ -1982,7 +1982,7 @@ void init_include_path(char *incpath[])
  */
 void add_incpath(char *path)
 {
-#if defined(MSDOS) || defined(AMIGA)
+#if defined(MSDOS) || defined(ATARI) || defined(AMIGA)
 	aol(include_path, include_path_nb, convert_path(path), INCPATH_MEMG);
 #else
 	aol(include_path, include_path_nb, sdup(path), INCPATH_MEMG);

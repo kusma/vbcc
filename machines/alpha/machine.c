@@ -990,11 +990,11 @@ void gen_ds(FILE *f,zmax size,struct Typ *t)
 {
   title(f);
   if(newobj){
-   size=zmmult(zmdiv(zmadd(size,l2zm(7L)),l2zm(8L)),l2zm(8L));
-    printzm(f,size);
+    size=zmmult(zmdiv(zmadd(size,l2zm(7L)),l2zm(8L)),l2zm(8L));
+    emitzm(f,size);
   }else{
     emit(f,"\t.zero\t");
-    printzm(f,size);
+    emitzm(f,size);
   }
   emit(f,"\n");
   newobj=0;
@@ -1024,9 +1024,12 @@ void gen_var_head(FILE *f,struct Var *v)
     if(!v->clist&&section!=BSS){emit(f,bssname);if(f) section=BSS;}
     emit(f,"\t.type\t%s%ld,@object\n",labprefix,zm2l(v->offset));
     emit(f,"\t.size\t%s%ld,%ld\n",labprefix,zm2l(v->offset),zm2l(szof(v->vtyp)));
-    if(section!=BSS) emit(f,"\t.align\t3\n%s%ld:\n",labprefix,zm2l(v->offset));
-    else emit(f,"\t.lcomm\t%s%ld,",labprefix,zm2l(v->offset));
-    newobj=1;
+    if(section!=BSS)
+      emit(f,"\t.align\t3\n%s%ld:\n",labprefix,zm2l(v->offset));
+    else{
+      emit(f,"\t.lcomm\t%s%ld,",labprefix,zm2l(v->offset));
+      newobj=1;
+    }
   }
   if(v->storage_class==EXTERN){
     emit(f,"\t.global\t%s%s\n",idprefix,v->identifier);
@@ -1036,9 +1039,12 @@ void gen_var_head(FILE *f,struct Var *v)
       if(!v->clist&&section!=BSS){emit(f,bssname);if(f) section=BSS;}
       emit(f,"\t.type\t%s%s,@object\n",idprefix,v->identifier);
       emit(f,"\t.size\t%s%s,%ld\n",idprefix,v->identifier,zm2l(szof(v->vtyp)));
-      if(section!=BSS) emit(f,"\t.align\t3\n%s%s:\n",idprefix,v->identifier);
-      else emit(f,"\t.comm\t%s%s,",idprefix,v->identifier);
-      newobj=1;
+      if(section!=BSS)
+	emit(f,"\t.align\t3\n%s%s:\n",idprefix,v->identifier);
+      else{
+	emit(f,"\t.comm\t%s%s,",idprefix,v->identifier);
+	newobj=1;
+      }
     }
   }
 }

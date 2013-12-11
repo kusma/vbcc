@@ -9,6 +9,7 @@ int test_assignment(struct Typ *,np);
 void make_cexpr(np);
 
 int dontopt;
+int no_cast_free;
 
 #ifdef HAVE_ECPP
 /* removed */
@@ -735,6 +736,13 @@ int type_expression2(np p,struct Typ *ttyp)
 
   if(f==CEXPR||f==PCEXPR||f==STRING) return 1;
 
+  if(f==BITFIELD) return 1;
+
+  if(f==LITERAL){
+    p->lvalue=1;
+    return 1;
+  }
+
   if(f==KOMMA){
     if(const_expr){error(46);return 0;}
     p->ntyp=clone_typ(p->right->ntyp);
@@ -1057,7 +1065,7 @@ int type_expression2(np p,struct Typ *ttyp)
 #endif
       }else{
 	/* ggfs. in kleinerem Zieltyp auswerten - bei float keinen shortcut (wäre evtl. double=>float unkritisch?) */
-	if(ttyp&&!ISFLOAT(p->left->ntyp->flags)&&!ISFLOAT(p->right->ntyp->flags)&&shortcut(f==PMULT?MULT:f,ttyp->flags&NU))
+	if(ttyp&&!ISFLOAT(ttyp->flags)&&!ISFLOAT(p->left->ntyp->flags)&&!ISFLOAT(p->right->ntyp->flags)&&shortcut(f==PMULT?MULT:f,ttyp->flags&NU))
 	  p->ntyp=clone_typ(ttyp);
 	else
 	  p->ntyp=arith_typ(p->left->ntyp,p->right->ntyp);
@@ -1153,7 +1161,11 @@ int type_expression2(np p,struct Typ *ttyp)
 	  error(81);
       insert_constn(p);
       p->flags=CEXPR;
-      if(!p->left->sidefx) {free_expression(p->left);p->left=0;}
+      if(!p->left->sidefx){
+	if(!no_cast_free) 
+	  free_expression(p->left);
+	p->left=0;
+      }
     }
 #ifdef HAVE_ECPP
 /* removed */
@@ -1645,7 +1657,7 @@ int type_expression2(np p,struct Typ *ttyp)
 		if(at==(UNSIGNED|LLONG)&&fflags!=LL){error(214);return ok;}
 		if(at==(UNSIGNED|LONG)&&fflags!='l'){error(214);return ok;}
 		if(fflags=='l'&&at!=(UNSIGNED|LONG)){error(214);return ok;}
-		if(at<(UNSIGNED|CHAR)||at>(UNSIGNED|LONG)){error(214);return ok;}
+		if(at<(UNSIGNED|CHAR)||at>(UNSIGNED|LLONG)){error(214);return ok;}
 		break;
 	      case 's':
 		fused|=1;

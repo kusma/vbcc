@@ -83,7 +83,8 @@ extern int MINADDI2P;
 /* support for variable-length arrays */
 #define ALLOCVLA_REG 9
 #define ALLOCVLA_INLINEASM "\tsub.l\td0,a7\n\tmove.l\ta7,d0"
-#define FREEVLA_REG 9
-#define FREEVLA_INLINEASM "\tmove.l\td0,a7"
+#define FREEVLA_REG 0
+/* TODO: find a better solution some time */
+#define FREEVLA_INLINEASM "\tmove.l\t(a7),a7\n\tsubq.l\t#4,a7"
 #define OLDSPVLA_INLINEASM "\tmove.l\ta7,d0"
 #define FPVLA_REG 6

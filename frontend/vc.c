@@ -1,5 +1,5 @@
 /*  Frontend for vbcc                       */
-/*  (c) in 1995-2009 by Volker Barthelmann  */
+/*  (c) in 1995-2010 by Volker Barthelmann  */
 /*  #define AMIGA for Amiga-Version         */
 
 #include <stdlib.h>
@@ -78,19 +78,20 @@ char *rmv=empty,*scv=empty;
 char *cf="@%s";
 char *nodb="";
 char *staticflag="";
+char *ul="-l%s";
 
 #if defined(AMIGA)
 const char *config_name="vc.config";
 const char *search_dirs[]={"","ENV:","VBCC:config/","VBCC:"};
-char *ul="vlib:%s.lib";
-#elif defined(_WIN32)||defined(MSDOS)
+#elif defined(_WIN32) || defined(MSDOS)
 const char *config_name="vc.cfg";
 const char *search_dirs[]={"","%VCCFG%\\"};
-char *ul="-l%s";
+#elif defined(ATARI)
+const char *config_name="vc.cfg";
+const char *search_dirs[]={"","C:\\"};
 #else
 const char *config_name="vc.config";
 const char *search_dirs[]={"","~/","/etc/"};
-char *ul="-l%s";
 #endif
 
 /*  String fuer die Default libraries   */
@@ -114,10 +115,6 @@ int final;
 char *config;
 char **confp;
 
-int typ(char *);
-char *add_suffix(char *,char *);
-void raus(int);
-
 char *command,*options,*linkcmd,*objects,*libs,*ppopts;
 #ifdef AMIGA
 struct AnchorPath *ap;
@@ -125,18 +122,22 @@ struct AnchorPath *ap;
 
 int linklen=10,flags=0;
 
-#if defined(_WIN32)||defined(MSDOS)
+#if defined(_WIN32)||defined(MSDOS)||defined(ATARI)
 char *tmpnam(char *p)
 {
   static int c=1675;
-  static char tmp[32];
+  static char tmp[256];
+  char *env;
+
+  env=getenv("TEMP");
+  if(!env) env=".";
   if(!p) p=tmp;
-  sprintf(p,"%s\\vbcc%04x",getenv("TEMP"),++c);
+  sprintf(p,"%s\\vbcc%04x",env,++c);
   return p;
 }
 #endif
 
-void free_namelist(struct NameList *p)
+static void free_namelist(struct NameList *p)
 {
     struct NameList *m;
     while(p){
@@ -151,16 +152,8 @@ void free_namelist(struct NameList *p)
         p=m;
     }
 }
-void del_scratch(struct NameList *p)
-{
-    while(p){
-        sprintf(command,rmname,p->obj);
-        if(flags&VERBOSE) printf("%s\n",command);
-        if(system(command)){printf("%s failed\n",command);raus(EXIT_FAILURE);}
-        p=p->next;
-    }
-}
-void raus(int rc)
+
+static void raus(int rc)
 {
     if(confp)   free(confp);
     if(config)  free(config);
@@ -182,7 +175,18 @@ void raus(int rc)
     free_namelist(first_scratch);
     exit(rc);
 }
-void add_name(char *obj,struct NameList **first,struct NameList **last)
+
+static void del_scratch(struct NameList *p)
+{
+    while(p){
+        sprintf(command,rmname,p->obj);
+        if(flags&VERBOSE) printf("%s\n",command);
+        if(system(command)){printf("%s failed\n",command);raus(EXIT_FAILURE);}
+        p=p->next;
+    }
+}
+
+static void add_name(char *obj,struct NameList **first,struct NameList **last)
 {
     struct NameList *new;
     if(flags&VERYVERBOSE) printf("add_name: %s\n",obj);
@@ -199,7 +203,8 @@ void add_name(char *obj,struct NameList **first,struct NameList **last)
         (*last)->next=new;*last=new;
     }
 }
-int read_config(const char *cfg_name)
+
+static int read_config(const char *cfg_name)
 {
     int i,count; long size;
     char *p,*name;
@@ -219,7 +224,7 @@ int read_config(const char *cfg_name)
         name=malloc(strlen(p)+strlen(cfg_name)+20);
         if(!name){printf(nomem);raus(EXIT_FAILURE);}
         strcpy(name,p);
-#if defined(_WIN32)||defined(MSDOS)
+#if defined(_WIN32)||defined(MSDOS)||defined(ATARI)
         strcat(name,"\\config\\");
         strcat(name,cfg_name);
 #elif defined(AMIGA)
@@ -255,6 +260,40 @@ int read_config(const char *cfg_name)
         p++;
     }
     return count;
+}
+
+static int typ(char *fp)
+{
+    char *p=strrchr(fp,'.');
+    if(p&&(!strcmp(p,".c")||!strcmp(p,".C"))) return ppname==empty?CCSRC:PPSRC;
+    if(p&&!strcmp(p,".i")) return CCSRC;
+    if(p&&(!strcmp(p,".s")||!strcmp(p,".S")||!strcmp(p,".asm"))) return ASSRC;
+    if(p&&!strcmp(p,".scs")) return SCSRC;
+    if(!p||!strcmp(p,".o")||!strcmp(p,".obj")){
+      FILE *f;
+      if(f=fopen(fp,"r")){
+        if(fgetc(f)==0&&fgetc(f)=='V'&&fgetc(f)=='B'&&fgetc(f)=='C'&&fgetc(f)=='C'){
+          fclose(f);     
+          return CCSRC;
+        }
+        fclose(f);
+      }
+      return OBJ;
+    }
+    return OBJ;
+}
+
+static char *add_suffix(char *s,char *suffix)
+{
+    static char str[NAMEBUF+3],*p;
+    if(strlen(s)+strlen(suffix)>NAMEBUF){printf("string too long\n");raus(EXIT_FAILURE);}
+    if(s!=str) strcpy(str,s);
+    p=strrchr(str,'.');
+    if(!p) p=str+strlen(s);
+    if(!p||p==str||(p==str+1&&str[0]=='\"')) p=str+strlen(s);
+    strcpy(p,suffix);
+    strcat(p,"\"");
+    return str;
 }
 
 int main(int argc,char *argv[])
@@ -376,14 +415,17 @@ int main(int argc,char *argv[])
       strcat(userlibs,nodb);
     }
     if(staticmode&&*staticflag){
-      if(strlen(userlibs)+2+strlen(staticflag)>=USERLIBS){
+      size_t ulen=strlen(userlibs);
+      size_t slen=strlen(staticflag);
+      if(ulen+2+slen>=USERLIBS){
         puts("Userlibs too long");exit(EXIT_FAILURE);
       }
-      strcat(userlibs," ");
-      strcat(userlibs,staticflag);
+      memmove(userlibs+slen+1,userlibs,ulen+1);
+      memcpy(userlibs,staticflag,slen);
+      userlibs[slen]=' ';
     }
     if(flags&VERBOSE){
-      printf("vc frontend for vbcc (c) in 1995-2008 by Volker Barthelmann\n");
+      printf("vc frontend for vbcc (c) in 1995-2010 by Volker Barthelmann\n");
 #ifdef SPECIAL_COPYRIGHT
       printf("%s\n",SPECIAL_COPYRIGHT);
 #endif
@@ -622,37 +664,4 @@ int main(int argc,char *argv[])
     }
     if(!(flags&KEEPSCRATCH)) del_scratch(first_scratch);
     raus(0);
-}
-
-int typ(char *fp)
-{
-    char *p=strrchr(fp,'.');
-    if(p&&(!strcmp(p,".c")||!strcmp(p,".C"))) return ppname==empty?CCSRC:PPSRC;
-    if(p&&!strcmp(p,".i")) return CCSRC;
-    if(p&&(!strcmp(p,".s")||!strcmp(p,".S")||!strcmp(p,".asm"))) return ASSRC;
-    if(p&&!strcmp(p,".scs")) return SCSRC;
-    if(!p||!strcmp(p,".o")||!strcmp(p,".obj")){
-      FILE *f;
-      if(f=fopen(fp,"r")){
-        if(fgetc(f)==0&&fgetc(f)=='V'&&fgetc(f)=='B'&&fgetc(f)=='C'&&fgetc(f)=='C'){
-          fclose(f);     
-          return CCSRC;
-        }
-        fclose(f);
-      }
-      return OBJ;
-    }
-    return OBJ;
-}
-
-char *add_suffix(char *s,char *suffix)
-{
-    static char str[NAMEBUF+3],*p;
-    if(strlen(s)+strlen(suffix)>NAMEBUF){printf("string too long\n");raus(EXIT_FAILURE);}
-    if(s!=str) strcpy(str,s);
-    p=strrchr(str,'.');
-    if(!p) p=str+strlen(s);
-    strcpy(p,suffix);
-    strcat(p,"\"");
-    return str;
 }

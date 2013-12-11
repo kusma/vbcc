@@ -835,6 +835,8 @@ int main(int argc,char *argv[])
 /* removed */
 /* removed */
 /* removed */
+/* removed */
+/* removed */
 #endif
     if(DEBUG&1) printf("first optimizing\n");
     for(v=first_ext;v;v=v->next){
@@ -1600,7 +1602,10 @@ void enter_block(void)
 void leave_block(void)
 /*  Setzt Zeiger/Struckturen bei Verlassen eines Blocks     */
 {
+  static int inleave;
   int i;
+  if(inleave) return;
+  inleave=1;
 #ifdef HAVE_ECPP
 /* removed */
 /* removed */
@@ -1608,7 +1613,7 @@ void leave_block(void)
 #endif
   for(i=1;i<=MAXR;i++)
     if(regbnesting[i]==nesting) regsbuf[i]=0;
-  if(nesting<0){error(10);return;}
+  if(nesting<0){error(10);inleave=0;return;}
   if(DEBUG&1) printf("leave block %d vla=%p\n",nesting,(void *)block_vla[nesting]);
   if(block_vla[nesting]) clearvl();
   if(nesting>0){
@@ -1668,6 +1673,7 @@ void leave_block(void)
     }
   }
   nesting--;
+  inleave=0;
 }
 void pra(FILE *f,struct argument_list *p)
 /*  Gibt argument_list umgekehrt auf Bildschirm aus             */
@@ -1754,7 +1760,7 @@ void do_error(int errn,va_list vl)
     fprintf(stderr,"\n");
     if(type&ERROR){
       errors++;
-      if(c_flags_val[8].l&&c_flags_val[8].l<=errors)
+      if(c_flags_val[8].l&&c_flags_val[8].l<=errors&&!(type&NORAUS))
 	{fprintf(stderr,"Maximum number of errors reached!\n");raus();}
     }
     if(type&FATAL){fprintf(stderr,"aborting...\n");raus();}

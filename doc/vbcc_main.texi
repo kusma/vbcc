@@ -102,6 +102,9 @@ or additional options.
                 @item implicit int deprecated
                 @item implicit function-declarations deprecated
                 @item increased translation-limits
+                @item designated initializers
+                @item non-constant initializers for automatic aggregates
+                @item compound literals
                 @item variable-length arrays (incomplete)
 @end itemize
 

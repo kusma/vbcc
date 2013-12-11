@@ -125,17 +125,17 @@ void labeled_statement(void)
   if(ctok->type==T_COLON){
     next_token();
     if(!*buff){
-			error(130);
-			return;
-		}
+      error(130);
+      return;
+    }
     if(!strcmp("default",buff)){
-			def=1;
-			lp=0;
-		} else lp=find_label(buff);
+      def=1;
+      lp=0;
+    } else lp=find_label(buff);
     if(lp&&lp->flags&LABELDEFINED){
-			error(131,buff);
-			return;
-		}
+      error(131,buff);
+      return;
+    }
     if(!lp) lp=add_label(buff);
     lp->flags|=LABELDEFINED;
     lp->switch_count=0;
@@ -155,9 +155,9 @@ void labeled_statement(void)
 		}
     gen_label(lp->label);
     afterlabel=0;
-	}else{
-		/*  case    */
-		np tree;struct llist *lp;
+  }else{
+    /*  case    */
+    np tree;struct llist *lp;
 #ifdef HAVE_MISRA
 /* removed */
 /* removed */
@@ -167,39 +167,39 @@ void labeled_statement(void)
 /* removed */
 /* removed */
 #endif
-		tree=expression();
-		killsp();
-		if(ctok->type==T_COLON){
-			next_token();
-			killsp();
-		} else error(70);
-		if(!switch_count){
-			error(132);
-		} else {
-			if(!tree||!type_expression(tree))
-			{
-			} else {
-				if(tree->flags!=CEXPR||tree->sidefx){
-					error(133);
-				} else {
-					if(!ISINT(tree->ntyp->flags)){
-						error(134);
-					} else {
-						lp=add_label(empty);
-						lp->flags=LABELDEFINED;
-						lp->switch_count=switch_act;
-						eval_constn(tree);
-						insert_const(&lp->val,switch_typ);
-						gen_label(lp->label);
-					}
-				}
-			}
-		}
-		if(tree) free_expression(tree);
+    tree=expression();
+    killsp();
+    if(ctok->type==T_COLON){
+      next_token();
+      killsp();
+    } else error(70);
+    if(!switch_count){
+      error(132);
+    } else {
+      if(!tree||!type_expression(tree))
+	{
+	} else {
+	if(tree->flags!=CEXPR||tree->sidefx){
+	  error(133);
+	} else {
+	  if(!ISINT(tree->ntyp->flags)){
+	    error(134);
+	  } else {
+	    lp=add_label(empty);
+	    lp->flags=LABELDEFINED;
+	    lp->switch_count=switch_act;
+	    eval_constn(tree);
+	    insert_const(&lp->val,switch_typ);
+	    gen_label(lp->label);
+	  }
 	}
-	cr();
-	killsp();
-	if(ctok->type!=RBRA) statement();
+      }
+    }
+    if(tree) free_expression(tree);
+  }
+  cr();
+  killsp();
+  if(ctok->type!=RBRA) statement();
 }
 void if_statement(void)
 /*  bearbeitet if_statement                                     */
@@ -330,203 +330,203 @@ void switch_statement(void)
     if(!type_expression(tree)){
     }else{
       if(!ISINT(tree->ntyp->flags)){
-				error(138);
+	error(138);
       } else {
-				int m1,m2,m3,def=0,rm,minflag;
-				zmax l,ml,s;zumax ul,mul,us;
-				if(tree->flags==ASSIGN&&tree->right->flags!=CALL) error(164);
+	int m1,m2,m3,def=0,rm,minflag;
+	zmax l,ml,s;zumax ul,mul,us;
+	if(tree->flags==ASSIGN&&tree->right->flags!=CALL) error(164);
 #ifdef HAVE_MISRA
 /* removed */
 /* removed */
 #endif 
-				m3=break_label=++label;m1=switch_act=++switch_count;
-				m2=switch_typ=tree->ntyp->flags&NU;
-				gen_IC(tree,0,0);
-				if((SWITCHSUBS&&!shortcut(SUB,m2))||(!SWITCHSUBS&&!shortcut(COMPARE,m2))){
-					switch_typ=m2=int_erw(m2);
-					convert(tree,m2);
-				}
-				if((tree->o.flags&(DREFOBJ|SCRATCH))!=SCRATCH){
-					new=new_IC();
-					new->code=ASSIGN;
-					new->q1=tree->o;
-					new->q2.flags=0;
-					new->q2.val.vmax=sizetab[m2&NQ];
-					get_scratch(&new->z,m2,0,0);
-					new->typf=m2;
-					tree->o=new->z;
-					add_IC(new);
-				}
-				if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)){
-					int r=tree->o.reg;
-					rm=regs[r];
-					regs[r]=regsa[r];
-				}
-				merk_fic=first_ic;merk_lic=last_ic;
-	
-				first_ic=last_ic=0;
-				{
-					int merk_sb=switchbreak;
-					switchbreak=1;
-					statement();
-					switchbreak=merk_sb;
-				}
-
-				if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) regs[tree->o.reg]=rm;
-				minflag=0;s=l2zm(0L);us=ul2zum(0UL);
-				num_cases=0;
-#ifdef HAVE_MISRA
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-#endif
-				for(l1=first_llist;l1;l1=l1->next)
-					if(l1->switch_count==m1) num_cases++;
-				for(l1=first_llist;l1;l1=l1->next){
-					if(l1->switch_count!=m1) continue;
-					if(l1->flags&LABELDEFAULT){
-						if(def) error(139);
-						def=l1->label;
-						continue;
-					}
-					lp=0;minflag&=~1;
-					for(l2=first_llist;l2;l2=l2->next){
-						if(l2->switch_count!=m1) continue;
-						if(l2->flags&LABELDEFAULT) continue;
-						eval_const(&l2->val,m2);
-						if(minflag&2){
-							if(m2&UNSIGNED){
-								if(zumleq(vumax,mul)||zumeqto(vumax,mul)) continue;
-							}else{
-								if(zmleq(vmax,ml)||zmeqto(vmax,ml)) continue;
-							}
-						}
-						if(minflag&1){
-							if(m2&UNSIGNED){
-								if(!(minflag&4)&&zumeqto(vumax,ul)){ 
-									error(201);
-									minflag|=4;
-								}
-								if(zumleq(vumax,ul)){
-									lp=l2;
-									ul=vumax;
-								}
-							}else{
-								if(!(minflag&4)&&zmeqto(vmax,l)){ error(201);minflag|=4;}
-								if(zmleq(vmax,l)){lp=l2;l=vmax;}
-							}
-						}else{
-							minflag|=1;
-							l=vmax;
-							ul=vumax;
-							lp=l2;
-						}
-					}
-					if(!lp) continue;
-					ml=l;mul=ul;minflag|=2;
-					if(SWITCHSUBS&&num_cases<JUMP_TABLE_LENGTH){
-						new=new_IC();
-					  new->line=0;
-						new->file=0;
-					  new->typf=m2;
-						new->code=SUB;
-						new->q1=tree->o;
-						new->z=tree->o;
-						new->q2.flags=KONST;
-						eval_const(&lp->val,m2);
-						if(m2&UNSIGNED){
-							gval.vumax=zumsub(vumax,us);
-							eval_const(&gval,UNSIGNED|MAXINT);
-						}else{
-							gval.vmax=zmsub(vmax,s);
-							eval_const(&gval,MAXINT);
-						}
-						insert_const(&new->q2.val,m2);
-						new->q1.am=new->q2.am=new->z.am=0;
-						s=l;us=ul;
-					  new->prev=merk_lic;
-						if(merk_lic) merk_lic->next=new; else merk_fic=new;
-						merk_lic=new;
-						new=new_IC();
-						new->line=0;
-						new->file=0;
-						new->typf=m2;
-						new->code=TEST;
-						new->q1=tree->o;
-						new->q2.flags=new->z.flags=0;
-						new->prev=merk_lic;
-						new->q1.am=new->q2.am=new->z.am=0;
-						if(merk_lic) merk_lic->next=new; else merk_fic=new;
-						merk_lic=new;
-					}else{
-						new=new_IC();
-						new->line=0;
-						new->file=0;
-						new->code=COMPARE;
-						new->typf=m2;
-						new->q1=tree->o;
-						new->q2.flags=KONST;
-						new->q2.val=lp->val;
-						new->z.flags=0;
-						new->prev=merk_lic;
-						new->q1.am=new->q2.am=new->z.am=0;
-						if(merk_lic) merk_lic->next=new; else merk_fic=new;
-						merk_lic=new;
-					}
-					new=new_IC();
-					new->line=0;
-					new->file=0;
-				  new->code=BEQ;
-				  new->typf=lp->label;
-					new->q1.flags=new->q2.flags=new->z.flags=0;
-					new->prev=merk_lic;
-				  new->q1.am=new->q2.am=new->z.am=0;
-					merk_lic->next=new;
-				  merk_lic=new;
-				}
-				if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)){   /* free_reg(tree->o.reg); */
-				  new=new_IC();
-					new->line=0;
-					new->file=0;
-				  new->code=FREEREG;new->typf=0;
-				  new->q2.flags=new->z.flags=0;
-					new->q1.flags=REG;
-					new->q1.reg=tree->o.reg;
-				  new->prev=merk_lic;
-					new->q1.am=new->q2.am=new->z.am=0;
-				  if(merk_lic) merk_lic->next=new; else merk_fic=new;
-				  merk_lic=new;
-					regs[tree->o.reg]=regsa[tree->o.reg];
-				}
-				new=new_IC();
-				new->line=0;
-				new->file=0;
-				new->code=BRA;
-				if(def) new->typf=def; else {
-#ifdef HAVE_MISRA
-/* removed */
-#endif
-					new->typf=m3;
-				}
-				new->q1.flags=new->q2.flags=new->z.flags=0;
-				if(merk_lic) merk_lic->next=new; else merk_fic=new;
-				new->prev=merk_lic;
-				if(first_ic){
-					first_ic->prev=new;
-					new->next=first_ic;
-				}else{
-					last_ic=new;
-					new->next=first_ic;
-				}
-				new->q1.am=new->q2.am=new->z.am=0;
-				first_ic=merk_fic;
-				gen_label(m3);
-			}
-		}
+	m3=break_label=++label;m1=switch_act=++switch_count;
+	m2=switch_typ=tree->ntyp->flags&NU;
+	gen_IC(tree,0,0);
+	if((SWITCHSUBS&&!shortcut(SUB,m2))||(!SWITCHSUBS&&!shortcut(COMPARE,m2))){
+	  switch_typ=m2=int_erw(m2);
+	  convert(tree,m2);
 	}
+	if((tree->o.flags&(DREFOBJ|SCRATCH))!=SCRATCH){
+	  new=new_IC();
+	  new->code=ASSIGN;
+	  new->q1=tree->o;
+	  new->q2.flags=0;
+	  new->q2.val.vmax=sizetab[m2&NQ];
+	  get_scratch(&new->z,m2,0,0);
+	  new->typf=m2;
+	  tree->o=new->z;
+	  add_IC(new);
+	}
+	if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)){
+	  int r=tree->o.reg;
+	  rm=regs[r];
+	  regs[r]=regsa[r];
+	}
+	merk_fic=first_ic;merk_lic=last_ic;
+	
+	first_ic=last_ic=0;
+	{
+	  int merk_sb=switchbreak;
+	  switchbreak=1;
+	  statement();
+	  switchbreak=merk_sb;
+	}
+	
+	if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) regs[tree->o.reg]=rm;
+	minflag=0;s=l2zm(0L);us=ul2zum(0UL);
+	num_cases=0;
+#ifdef HAVE_MISRA
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+#endif
+	for(l1=first_llist;l1;l1=l1->next)
+	  if(l1->switch_count==m1) num_cases++;
+	for(l1=first_llist;l1;l1=l1->next){
+	  if(l1->switch_count!=m1) continue;
+	  if(l1->flags&LABELDEFAULT){
+	    if(def) error(139);
+	    def=l1->label;
+	    continue;
+	  }
+	  lp=0;minflag&=~1;
+	  for(l2=first_llist;l2;l2=l2->next){
+	    if(l2->switch_count!=m1) continue;
+	    if(l2->flags&LABELDEFAULT) continue;
+	    eval_const(&l2->val,m2);
+	    if(minflag&2){
+	      if(m2&UNSIGNED){
+		if(zumleq(vumax,mul)||zumeqto(vumax,mul)) continue;
+	      }else{
+		if(zmleq(vmax,ml)||zmeqto(vmax,ml)) continue;
+	      }
+	    }
+	    if(minflag&1){
+	      if(m2&UNSIGNED){
+		if(!(minflag&4)&&zumeqto(vumax,ul)){ 
+		  error(201);
+		  minflag|=4;
+		}
+		if(zumleq(vumax,ul)){
+		  lp=l2;
+		  ul=vumax;
+		}
+	      }else{
+		if(!(minflag&4)&&zmeqto(vmax,l)){ error(201);minflag|=4;}
+		if(zmleq(vmax,l)){lp=l2;l=vmax;}
+	      }
+	    }else{
+	      minflag|=1;
+	      l=vmax;
+	      ul=vumax;
+	      lp=l2;
+	    }
+	  }
+	  if(!lp) continue;
+	  ml=l;mul=ul;minflag|=2;
+	  if(SWITCHSUBS&&num_cases<JUMP_TABLE_LENGTH){
+	    new=new_IC();
+	    new->line=0;
+	    new->file=0;
+	    new->typf=m2;
+	    new->code=SUB;
+	    new->q1=tree->o;
+	    new->z=tree->o;
+	    new->q2.flags=KONST;
+	    eval_const(&lp->val,m2);
+	    if(m2&UNSIGNED){
+	      gval.vumax=zumsub(vumax,us);
+	      eval_const(&gval,UNSIGNED|MAXINT);
+	    }else{
+	      gval.vmax=zmsub(vmax,s);
+	      eval_const(&gval,MAXINT);
+	    }
+	    insert_const(&new->q2.val,m2);
+	    new->q1.am=new->q2.am=new->z.am=0;
+	    s=l;us=ul;
+	    new->prev=merk_lic;
+	    if(merk_lic) merk_lic->next=new; else merk_fic=new;
+	    merk_lic=new;
+	    new=new_IC();
+	    new->line=0;
+	    new->file=0;
+	    new->typf=m2;
+	    new->code=TEST;
+	    new->q1=tree->o;
+	    new->q2.flags=new->z.flags=0;
+	    new->prev=merk_lic;
+	    new->q1.am=new->q2.am=new->z.am=0;
+	    if(merk_lic) merk_lic->next=new; else merk_fic=new;
+	    merk_lic=new;
+	  }else{
+	    new=new_IC();
+	    new->line=0;
+	    new->file=0;
+	    new->code=COMPARE;
+	    new->typf=m2;
+	    new->q1=tree->o;
+	    new->q2.flags=KONST;
+	    new->q2.val=lp->val;
+	    new->z.flags=0;
+	    new->prev=merk_lic;
+	    new->q1.am=new->q2.am=new->z.am=0;
+	    if(merk_lic) merk_lic->next=new; else merk_fic=new;
+	    merk_lic=new;
+	  }
+	  new=new_IC();
+	  new->line=0;
+	  new->file=0;
+	  new->code=BEQ;
+	  new->typf=lp->label;
+	  new->q1.flags=new->q2.flags=new->z.flags=0;
+	  new->prev=merk_lic;
+	  new->q1.am=new->q2.am=new->z.am=0;
+	  merk_lic->next=new;
+	  merk_lic=new;
+	}
+	if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)){   /* free_reg(tree->o.reg); */
+	  new=new_IC();
+	  new->line=0;
+	  new->file=0;
+	  new->code=FREEREG;new->typf=0;
+	  new->q2.flags=new->z.flags=0;
+	  new->q1.flags=REG;
+	  new->q1.reg=tree->o.reg;
+	  new->prev=merk_lic;
+	  new->q1.am=new->q2.am=new->z.am=0;
+	  if(merk_lic) merk_lic->next=new; else merk_fic=new;
+	  merk_lic=new;
+	  regs[tree->o.reg]=regsa[tree->o.reg];
+	}
+	new=new_IC();
+	new->line=0;
+	new->file=0;
+	new->code=BRA;
+	if(def) new->typf=def; else {
+#ifdef HAVE_MISRA
+/* removed */
+#endif
+	  new->typf=m3;
+	}
+	new->q1.flags=new->q2.flags=new->z.flags=0;
+	if(merk_lic) merk_lic->next=new; else merk_fic=new;
+	new->prev=merk_lic;
+	if(first_ic){
+	  first_ic->prev=new;
+	  new->next=first_ic;
+	}else{
+	  last_ic=new;
+	  new->next=first_ic;
+	}
+	new->q1.am=new->q2.am=new->z.am=0;
+	first_ic=merk_fic;
+	gen_label(m3);
+      }
+    }
+  }
   switch_typ=merk_typ;switch_act=merk_count;break_label=merk_break;
   if(tree) free_expression(tree);
   cr();
@@ -687,6 +687,7 @@ void for_statement(void)
   if(c99&&declaration(0)){
     with_decl=1;
     enter_block();
+    if(nesting>0) local_offset[nesting]=local_offset[nesting-1];
     for_decl=1;
     var_declaration();
     for_decl=0;
@@ -951,7 +952,10 @@ void goto_statement(void)
   }else{
     if(is_keyword(ctok->name)) error(216,ctok->name);
     lp=find_label(ctok->name);
-    if(!lp) lp=add_label(ctok->name);
+    if(!lp){
+      lp=add_label(ctok->name);
+      lp->switch_count=0;
+    }
     lp->flags|=LABELUSED;
     new=new_IC();
     new->typf=lp->label;
@@ -1146,26 +1150,26 @@ void expression_statement(void)
     if(tree->flags==POSTDEC) tree->flags=PREDEC;
     if(type_expression(tree)){
       if(DEBUG&2){
-				pre(stdout,tree);
-				printf("\n");
-			}
+	pre(stdout,tree);
+	printf("\n");
+      }
       if(tree->sidefx){
-				gen_IC(tree,0,0);
-				if((tree->o.flags&(SCRATCH|REG))==REG) ierror(0);
-				if(tree&&(tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) free_reg(tree->o.reg);
+	gen_IC(tree,0,0);
+	if((tree->o.flags&(SCRATCH|REG))==REG) ierror(0);
+	if(tree&&(tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) free_reg(tree->o.reg);
       }else{
 #ifdef HAVE_MISRA
 /* removed */
 #endif
-				error(153);
-				if(DEBUG&2) prd(stdout,tree->ntyp);
-			}
-		}
-		free_expression(tree);
-	}
-	killsp();
-	if(ctok->type==SEMIC) next_token(); else error(54);
-	cr();
+	error(153);
+	if(DEBUG&2) prd(stdout,tree->ntyp);
+      }
+    }
+    free_expression(tree);
+  }
+  killsp();
+  if(ctok->type==SEMIC) next_token(); else error(54);
+  cr();
 }
 void compound_statement(void)
 /*  bearbeitet compound_statement (block)                       */

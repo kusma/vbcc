@@ -78,6 +78,10 @@ extern char *add_identifier(char *,int);
 extern struct Typ *declarator(struct Typ *),*direct_declarator(struct Typ *),
            *pointer(struct Typ *),*declaration_specifiers(void);
 extern int declaration(int),type_uncomplete(struct Typ *);
+extern struct const_list *initialization(struct Typ *,int,int,int,struct struct_declaration *,struct const_list *);
+extern void init_local_compound(struct Var *);
+extern zmax init_dyn_sz,init_const_sz;
+extern int init_dyn_cnt,init_const_cnt;
 extern struct struct_declaration *find_struct(char *,int);
 extern void add_struct_identifier(char *,struct struct_declaration *);
 extern void free_si(struct struct_identifier *);
@@ -139,6 +143,7 @@ extern void expression_statement(void),compound_statement(void);
 extern void translation_unit(void);
 extern int main(int, char *[]);
 extern int nocode,dontdelete,registerpri,looppri,currentpri;
+extern int no_cast_free;
 
 extern np makepointer(np);
 
@@ -202,6 +207,7 @@ struct err_out{
 #define NOLINE    256
 #define INFUNC    512
 #define INIC     1024
+#define NORAUS   2048
 
 extern struct err_out err_out[];
 extern int err_num;

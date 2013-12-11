@@ -8,7 +8,7 @@
 
 This is the manual for the vbcc compiler system.
 
-Copyright 1995-2009 Volker Barthelmann
+Copyright 1995-2011 Volker Barthelmann
 
 @end ifinfo
 
@@ -69,7 +69,7 @@ Copyright 1995-2009 Volker Barthelmann
 
 @section Legal
 
-    vbcc is copyright in 1995-2009 by Volker Barthelmann.
+    vbcc is copyright in 1995-2011 by Volker Barthelmann.
 
     This archive may be redistributed without modifications and used
     for non-commercial purposes.
@@ -257,9 +257,14 @@ assign >NIL: vlibwos: vbcc:target/ppc-warpos/lib
 
 @end example
 
-    Also, the stack-size has to be increased from the default.
-    40KB is a sensible value, for very large projects higher
+    Also, the stack-size has to be increased from the default, for those
+    binaries which don't do that automatically (e.g. AmigaOS4).
+    64KB is a sensible value, for very large projects higher
     values might be necessary.
+
+    For writing AmigaOS/MorphOS programs you will need the appropriate
+    system header files. Please use NDK 3.9 or later for AmigaOS/68k, as
+    the proto/inline headers have been created with it.
 
     There are different configuration files provided in the
     @file{config}-subdirectory to choose different targets (i.e.
