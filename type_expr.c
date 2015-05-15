@@ -367,23 +367,24 @@ int const_typ(struct Typ *p)
 struct Typ *arith_typ(struct Typ *a,struct Typ *b)
 /*  Erzeugt Typ fuer arithmetische Umwandlung von zwei Operanden    */
 {
-    int ta,tb;struct Typ *new;
+  int ta,tb,va,vol;struct Typ *new;
     new=new_typ();
     ta=a->flags&NU;tb=b->flags&NU;
-    if(ta==LDOUBLE||tb==LDOUBLE){new->flags=LDOUBLE;return new;}
-    if(ta==DOUBLE||tb==DOUBLE){new->flags=DOUBLE;return new;}
-    if(ta==FLOAT||tb==FLOAT){new->flags=FLOAT;return new;}
+    vol=(a->flags&VOLATILE)|(b->flags&VOLATILE);
+    if(ta==LDOUBLE||tb==LDOUBLE){new->flags=LDOUBLE|vol;return new;}
+    if(ta==DOUBLE||tb==DOUBLE){new->flags=DOUBLE|vol;return new;}
+    if(ta==FLOAT||tb==FLOAT){new->flags=FLOAT|vol;return new;}
     ta=int_erw(ta);tb=int_erw(tb);
-    if(ta==(UNSIGNED|LLONG)||tb==(UNSIGNED|LLONG)){new->flags=UNSIGNED|LLONG;return new;}
-    if(ta==LLONG||tb==LLONG){new->flags=LLONG;return new;}
-    if(ta==(UNSIGNED|LONG)||tb==(UNSIGNED|LONG)){new->flags=UNSIGNED|LONG;return new;}
+    if(ta==(UNSIGNED|LLONG)||tb==(UNSIGNED|LLONG)){new->flags=UNSIGNED|LLONG|vol;return new;}
+    if(ta==LLONG||tb==LLONG){new->flags=LLONG|vol;return new;}
+    if(ta==(UNSIGNED|LONG)||tb==(UNSIGNED|LONG)){new->flags=UNSIGNED|LONG|vol;return new;}
     if((ta==LONG&&tb==(UNSIGNED|INT))||(ta==(UNSIGNED|INT)&&tb==LONG)){
-        if(zumleq(t_max(UNSIGNED|INT),t_max(LONG))) new->flags=LONG; else new->flags=UNSIGNED|LONG;
+        if(zumleq(t_max(UNSIGNED|INT),t_max(LONG))) new->flags=LONG|vol; else new->flags=UNSIGNED|LONG|vol;
         return new;
     }
-    if(ta==LONG||tb==LONG){new->flags=LONG;return new;}
-    if(ta==(UNSIGNED|INT)||tb==(UNSIGNED|INT)){new->flags=UNSIGNED|INT;return new;}
-    new->flags=INT;
+    if(ta==LONG||tb==LONG){new->flags=LONG|vol;return new;}
+    if(ta==(UNSIGNED|INT)||tb==(UNSIGNED|INT)){new->flags=UNSIGNED|INT|vol;return new;}
+    new->flags=INT|vol;
     return new;
 }
 int int_erw(int t)
@@ -412,7 +413,7 @@ static np aos4_clone_tree(np p)
 {
   np new;
   if(!p) return 0;
-  new=mymalloc(NODES);
+  new=new_node();
   *new=*p;
   new->ntyp=clone_typ(p->ntyp);
   new->left=aos4_clone_tree(p->left);
@@ -524,7 +525,7 @@ int type_expression2(np p,struct Typ *ttyp)
   }
 #if HAVE_AOS4
   if(f==CALL&&p->left->flags==DSTRUCT){
-    thisp=mymalloc(NODES);
+    thisp=new_node();
     thisp->flags=ADDRESS;
     aos4err=0;
     thisp->left=aos4_clone_tree(p->left->left);
@@ -601,7 +602,7 @@ int type_expression2(np p,struct Typ *ttyp)
 /*  Hier muss noch einiges genauer werden (wie gehoert das?)    */
   if(p->left&&(ISARRAY(p->left->ntyp->flags)||ISFUNC(p->left->ntyp->flags))){
     if(f!=ADDRESS&&f!=ADDRESSA&&f!=ADDRESSS&&f!=FIRSTELEMENT&&f!=DSTRUCT&&(f<PREINC||f>POSTDEC)&&(f<ASSIGN||f>ASSIGNOP)){
-      np new=mymalloc(NODES);
+      np new=new_node();
       if((p->left->ntyp->flags&NQ)==ARRAY) new->flags=ADDRESSA;
       else new->flags=ADDRESS;
       new->ntyp=0;
@@ -612,7 +613,7 @@ int type_expression2(np p,struct Typ *ttyp)
     }
   }
   if(p->right&&f!=FIRSTELEMENT&&f!=DSTRUCT&&f!=ADDRESSS&&(ISARRAY(p->right->ntyp->flags)||ISFUNC(p->right->ntyp->flags))){
-    np new=mymalloc(NODES);
+    np new=new_node();
     if(ISARRAY(p->right->ntyp->flags)) new->flags=ADDRESSA;
     else new->flags=ADDRESS;
     new->ntyp=0;
@@ -712,7 +713,7 @@ int type_expression2(np p,struct Typ *ttyp)
       return 0;
     }
     ff=v->vtyp->flags&NQ;
-    if(ISARITH(ff)||ISPOINTER(ff)||ISSTRUCT(ff)||ISUNION(ff)) p->lvalue=1;
+    if(ISARITH(ff)||ISPOINTER(ff)||ISSTRUCT(ff)||ISUNION(ff)||ISVECTOR(ff)) p->lvalue=1;
     p->ntyp=clone_typ(v->vtyp);
     /*  arithmetischen const Typ als Konstante behandeln, das muss noch
 	deutlich anders werden, bevor man es wirklich so machen kann
@@ -735,6 +736,11 @@ int type_expression2(np p,struct Typ *ttyp)
   }
 
   if(f==CEXPR||f==PCEXPR||f==STRING) return 1;
+
+  if(f==REINTERPRET){
+    /* todo: add checks */
+    return 1;
+  }
 
   if(f==BITFIELD) return 1;
 
@@ -762,6 +768,21 @@ int type_expression2(np p,struct Typ *ttyp)
   }
   if(f==LOR||f==LAND){
     int a1=-1,a2=-1,m;
+    if(ISVECTOR(p->left->ntyp->flags)){
+      if(ISVECTOR(p->right->ntyp->flags)){
+	if((p->left->ntyp->flags&NU)!=(p->right->ntyp->flags&NU)){error(89);return 0;}
+      }else{
+	if(!ISINT(p->right->ntyp->flags)){error(89);return 0;}
+      }
+      p->ntyp=new_typ();
+      p->ntyp->flags=p->left->ntyp->flags&NQ;
+      return ok;
+    }
+    if(ISVECTOR(p->right->ntyp->flags)){
+      if(!ISINT(p->left->ntyp->flags)){error(89);return 0;}
+      p->ntyp->flags=p->right->ntyp->flags&NQ;
+      return ok;
+    }
     if(f==LAND) m=1; else m=0;
 #ifdef HAVE_MISRA
 /* removed */
@@ -790,6 +811,22 @@ int type_expression2(np p,struct Typ *ttyp)
     return ok;
   }
   if(f==OR||f==AND||f==XOR){
+    if(ISVECTOR(p->left->ntyp->flags)){
+      if(!ISINT(VECTYPE(p->left->ntyp->flags))){error(90);return 0;}
+      if(ISVECTOR(p->right->ntyp->flags)){
+	if((p->left->ntyp->flags&NU)!=(p->right->ntyp->flags&NU)){error(98);return 0;}
+      }else{
+	if(!ISINT(p->right->ntyp->flags)){error(90);return 0;}
+      }
+      p->ntyp=clone_typ(p->left->ntyp);
+      return ok;
+    }
+    if(ISVECTOR(p->right->ntyp->flags)){
+      if(!ISINT(VECTYPE(p->right->ntyp->flags))){error(90);return 0;}
+      if(!ISINT(p->left->ntyp->flags)){error(90);return 0;}
+      p->ntyp=clone_typ(p->right->ntyp);
+      return ok;
+    }
     if(!ISINT(p->left->ntyp->flags)){error(90);return 0;}
     if(!ISINT(p->right->ntyp->flags)){error(90);return 0;}
 #ifdef HAVE_MISRA
@@ -812,6 +849,25 @@ int type_expression2(np p,struct Typ *ttyp)
     /*  werden                                                          */
     zmax s1,s2;zumax u1,u2;zldouble d1,d2;int c=0;
     struct Typ *t;
+    if(ISVECTOR(p->left->ntyp->flags)){
+      if(ISVECTOR(p->right->ntyp->flags)){
+	if((p->left->ntyp->flags&NU)!=(p->right->ntyp->flags&NU)){error(89);return 0;}
+      }
+      p->ntyp=new_typ();
+      if(ISFLOAT(VECTYPE(p->left->ntyp->flags)))
+	p->ntyp->flags=mkvec(INT,VECDIM(p->left->ntyp->flags));
+      else
+	p->ntyp->flags=p->left->ntyp->flags&NQ;
+      return ok;
+    }
+    if(ISVECTOR(p->right->ntyp->flags)){
+      p->ntyp=new_typ();
+      if(ISFLOAT(VECTYPE(p->right->ntyp->flags)))
+	p->ntyp->flags=mkvec(INT,VECDIM(p->left->ntyp->flags));
+      else
+	p->ntyp->flags=p->right->ntyp->flags&NQ;
+      return ok;
+    }
 #ifdef HAVE_MISRA
 /* removed */
 /* removed */
@@ -936,7 +992,35 @@ int type_expression2(np p,struct Typ *ttyp)
     return ok;
   }
   if(f==ADD||f==SUB||f==MULT||f==DIV||f==MOD||f==LSHIFT||f==RSHIFT||f==PMULT){
-    if(!ISARITH(p->left->ntyp->flags&NQ)||!ISARITH(p->right->ntyp->flags&NQ)){
+    if(ISVECTOR(p->left->ntyp->flags)){
+      if((f==MOD||f==LSHIFT||f==RSHIFT)&&ISFLOAT(VECTYPE(p->left->ntyp->flags))){
+	error(98);
+	return 0;
+      }
+      if(ISARITH(p->right->ntyp->flags)){
+	p->ntyp=clone_typ(p->left->ntyp);
+	return ok;
+      }
+      if((p->left->ntyp->flags&NU)==(p->right->ntyp->flags&NU)){
+	p->ntyp=clone_typ(p->left->ntyp);
+	return ok;
+      }
+      error(98);
+      return 0;
+    }
+    if(ISVECTOR(p->right->ntyp->flags)){
+      if((f==MOD||f==LSHIFT||f==RSHIFT)&&ISFLOAT(VECTYPE(p->right->ntyp->flags))){
+	error(98);
+	return 0;
+      }
+      if(ISARITH(p->left->ntyp->flags)){
+	p->ntyp=clone_typ(p->right->ntyp);
+	return ok;
+      }
+      error(98);
+      return 0;
+    }
+    if(!ISARITH(p->left->ntyp->flags)||!ISARITH(p->right->ntyp->flags)){
       np new;zmax sz; int type=0;
 #ifdef MAXADDI2P
       static struct Typ pmt={MAXADDI2P};
@@ -964,11 +1048,11 @@ int type_expression2(np p,struct Typ *ttyp)
 	  if(!ISINT(p->right->ntyp->flags))
 	    {error(97,ename[f]);return 0;}
 	  if(p->right->flags!=PMULT&&p->right->flags!=PCEXPR){
-	    new=mymalloc(NODES);
+	    new=new_node();
 	    new->flags=PMULT;
 	    new->ntyp=0;
 	    new->left=p->right;
-	    new->right=mymalloc(NODES);
+	    new->right=new_node();
 	    if(is_vlength(p->left->ntyp->next)){
 	      new->right->flags=IDENTIFIER;
 	      new->right->identifier=empty;
@@ -1003,11 +1087,11 @@ int type_expression2(np p,struct Typ *ttyp)
 	  {error(98);return 0;}
 	if(p->flags==SUB){error(99);return 0;}
 	if(p->left->flags!=PMULT&&p->left->flags!=PCEXPR){
-	  new=mymalloc(NODES);
+	  new=new_node();
 	  new->flags=PMULT;
 	  new->ntyp=0;
 	  new->left=p->left;
-	  new->right=mymalloc(NODES);
+	  new->right=new_node();
 	  if(is_vlength(p->right->ntyp->next)){
 	    new->right->flags=IDENTIFIER;
 	    new->right->identifier=empty;
@@ -1200,6 +1284,17 @@ int type_expression2(np p,struct Typ *ttyp)
     return ok;
   }
   if(f==MINUS||f==KOMPLEMENT||f==NEGATION){
+    if(ISVECTOR(p->left->ntyp->flags)){
+      if(f==NEGATION){
+	if(ISFLOAT(VECTYPE(p->left->ntyp->flags))){error(98);return 0;}
+	p->ntyp=new_typ();
+	p->ntyp->flags=p->left->ntyp->flags&NQ;
+	return ok;
+      }
+      if(f==KOMPLEMENT&&ISFLOAT(VECTYPE(p->left->ntyp->flags))){error(109);return 0;}
+      p->ntyp=clone_typ(p->left->ntyp);
+      return ok;
+    }
     if(!ISARITH(p->left->ntyp->flags)){
       if(f!=NEGATION){
 	error(107);return 0;
@@ -1449,10 +1544,10 @@ int type_expression2(np p,struct Typ *ttyp)
     if(ISUNION(p->left->ntyp->flags)) offset=l2zm(0L);
     p->flags=CONTENT;
     if(p->ntyp) {freetyp(p->ntyp);p->ntyp=0;}
-    new=mymalloc(NODES);
+    new=new_node();
     new->flags=ADD;
     new->ntyp=0;
-    new->right=mymalloc(NODES);
+    new->right=new_node();
     new->right->left=new->right->right=0;
     new->right->flags=PCEXPR;
     new->right->ntyp=new_typ();
@@ -1464,7 +1559,7 @@ int type_expression2(np p,struct Typ *ttyp)
       new->right->ntyp->next=0;
       new->right->val.vlong=zm2zl(offset);
     }
-    new->left=mymalloc(NODES);
+    new->left=new_node();
     new->left->flags=ADDRESSS;
     new->left->left=p->left;
     new->left->right=p->right;
@@ -1484,7 +1579,7 @@ int type_expression2(np p,struct Typ *ttyp)
     if(bfs!=-1){
       /* create a special node for bitfields */
       ok|=type_expression2(p,0);
-      new=mymalloc(NODES);
+      new=new_node();
       *new=*p;
       p->flags=BITFIELD;
       p->left=new;
@@ -1777,7 +1872,6 @@ int type_expression2(np p,struct Typ *ttyp)
     return ok;
   }
   if(f==COND){
-    if(const_expr){error(46);return 0;}
     if(!ISARITH(p->left->ntyp->flags)&&!ISPOINTER(p->left->ntyp->flags)){
       error(29);
       return 0;
@@ -1803,6 +1897,7 @@ int type_expression2(np p,struct Typ *ttyp)
       free(merk);
       return 1;
     }
+    if(const_expr){error(46);return 0;}
     p->ntyp=clone_typ(p->right->ntyp);
     return 1;
   }
@@ -1853,7 +1948,7 @@ np makepointer(np p)
 {
     struct struct_declaration *sd;
     if(ISARRAY(p->ntyp->flags)||ISFUNC(p->ntyp->flags)){
-        np new=mymalloc(NODES);
+      np new=new_node();
         if(ISARRAY(p->ntyp->flags)){
             new->flags=ADDRESSA;
             new->ntyp=clone_typ(p->ntyp);
@@ -1881,6 +1976,11 @@ int alg_opt(np p,struct Typ *ttyp)
     int c=0,f,komm,null1,null2,eins1,eins2;np merk;
     zldouble d1,d2;zumax u1,u2;zmax s1,s2;
     f=p->flags;
+    
+    /* do not optimze pointer-pointer */
+    if(f==SUB&&ISPOINTER(p->left->ntyp->flags)&&ISPOINTER(p->right->ntyp->flags))
+      return 1;
+
     /*  kommutativ? */
     if(f==ADD||f==MULT||f==PMULT||(f>=OR&&f<=AND)) komm=1; else komm=0;
     /*  Berechnet Wert, wenn beides Konstanten sind     */
@@ -2092,6 +2192,9 @@ int test_assignment(struct Typ *zt,np q)
       return 0;
     }else 
   return 1;
+  }
+  if(ISVECTOR(zt->flags)&&(zt->flags&NU)==(qt->flags&NU)){
+      return 1;
   }
   if(ISPOINTER(zt->flags)&&ISPOINTER(qt->flags)){
     if((zt->next->flags&NQ)==VOID&&!ISFUNC(qt->next->flags)) return 1;

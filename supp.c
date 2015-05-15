@@ -5,8 +5,9 @@ static char FILE_[]=__FILE__;
 
 #ifndef HAVE_EXT_TYPES
 char *typname[]={"strange","char","short","int","long","long long",
-		 "float","double","long double","void",
-                 "pointer","array","struct","union","enum","function"};
+                 "float","double","long double","void",
+                 "pointer","array","struct","union","enum","function",
+                 "bool","vector"};
 #endif
 
 char *storage_class_name[]={"strange","auto","register","static","extern","typedef"};
@@ -165,7 +166,9 @@ struct IC *new_IC(void)
   p->flags=0;
   p->q1.flags=p->q2.flags=p->z.flags=0;
   p->q1.am=p->q2.am=p->z.am=0;
+  p->q1.val.vmax=p->q2.val.vmax=p->z.val.vmax=l2zm(0L);
   p->savedsp=0;
+  p->typf=p->typf2=0;
 #ifdef ALEX_REG
   p->iZWebIndex = -1;
   p->iQ1WebIndex = -1;
@@ -189,7 +192,7 @@ struct IC *clone_ic(struct IC *p)
       int i;
       new->arg_list=mymalloc(sizeof(*new->arg_list)*new->arg_cnt);
       for(i=0;i<new->arg_cnt;i++)
-	new->arg_list[i]=p->arg_list[i]->copy;
+        new->arg_list[i]=p->arg_list[i]->copy;
     }
     new->prev=last;
     new->next=0;
@@ -249,7 +252,7 @@ void freetyp(struct Typ *p)
   while(p){
     merk=p->next;
     f=p->flags&NQ;
-    if(merk&&!ISARRAY(f)&&!ISPOINTER(f)&&!ISFUNC(f)) 
+    if(merk&&!ISARRAY(f)&&!ISPOINTER(f)&&!ISFUNC(f)&&!ISVECTOR(f)) 
       ierror(0);
     free(p->attr);
     free(p);
@@ -264,13 +267,14 @@ zmax falign(struct Typ *t)
 {
   int i,f; zmax al,alt;
   f=t->flags&NQ;
+  if(ISVECTOR(f)) return szof(t);
   al=align[f];
   if(ISSCALAR(f)) return al;
   if(ISARRAY(f)){
     do{ 
       t=t->next; 
       f=t->flags&NQ;
-    }while(ISARRAY(f));
+    }while(ISARRAY(f)||ISVECTOR(f));
     alt=falign(t);
     if(zmleq(al,alt)) return alt; else return al;
   }
@@ -338,6 +342,51 @@ struct Var *vlength_szof(struct Typ *t)
   return new->z.v;
 }
 
+/* return the type of a d-dim vector of base type x */
+int mkvec(int x,int d)
+{
+  int t=x&NQ,r;
+  if(d!=2&&d!=3&&d!=4&&d!=8&&d!=16) ierror(0);
+  switch(t){
+  case BOOL:
+    r=VECBOOL;break;
+  case CHAR:
+    r=VECCHAR;break;
+  case SHORT:
+    r=VECSHORT;break;
+  case INT:
+    r=VECINT;break;
+  case LONG:
+    r=VECLONG;break;
+  case FLOAT:
+    r=VECFLOAT;break;
+  default:
+    ierror(0);
+  }
+  return (r+d-1)|(x&~NQ);
+}
+
+/* return the base type of a vector */
+int VECTYPE(int x)
+{
+  int t=x&NQ,r=0;
+  if(t>=VECBOOL&&t<=VECBOOL+MAXVECDIM)
+    r=BOOL;
+  if(t>=VECCHAR&&t<=VECCHAR+MAXVECDIM)
+    r=CHAR;
+  if(t>=VECSHORT&&t<=VECSHORT+MAXVECDIM)
+    r=SHORT;
+  if(t>=VECINT&&t<=VECINT+MAXVECDIM)
+    r=INT;
+  if(t>=VECLONG&&t<=VECLONG+MAXVECDIM)
+    r=LONG;
+  if(t>=VECFLOAT&&t<=VECFLOAT+MAXVECDIM)
+    r=FLOAT;
+  if(!r) ierror(0);
+  return r|(x&~NQ);
+}
+
+
 #ifndef HAVE_TGT_SZOF
 zmax szof(struct Typ *t)
 /*  Liefert die benoetigte Groesse eines Typs in Bytes.     */
@@ -346,6 +395,7 @@ zmax szof(struct Typ *t)
 #ifdef HAVE_ECPP
 /* removed */
 #endif
+
   if(ISSCALAR(i)) return sizetab[i];
   if(ISARRAY(i)){
     if(is_vlength(t))
@@ -353,6 +403,11 @@ zmax szof(struct Typ *t)
     size=zmmult((t->size),szof(t->next));
     m=align[ARRAY];
     return zmmult(zmdiv(zmadd(size,zmsub(m,l2zm(1L))),m),m); /* align */
+  }
+  if(ISVECTOR(i)){
+    zmax dim=VECDIM(i);
+    if(zmeqto(dim,l2zm(3L))) dim=l2zm(4L);
+    return zmmult(dim,sizetab[VECTYPE(i)&NQ]);
   }
   if(ISUNION(i)){
     for(j=0,size=l2zm(0L);j<t->exact->count;j++){
@@ -515,7 +570,12 @@ void pric2(FILE *f,struct IC *p)
     if(p->typf&VOLATILE) fprintf(f,"volatile ");
     if(p->typf&CONST) fprintf(f,"const ");
     if(p->typf&UNSIGNED) fprintf(f,"unsigned ");
-    if(p->typf) fprintf(f,"%s ",typname[p->typf&NQ]);
+    if(p->typf){
+      if(ISVECTOR(p->typf))
+	fprintf(f,"%s%d ",typname[VECTYPE(p->typf)&NQ],VECDIM(p->typf));
+      else
+	fprintf(f,"%s ",typname[p->typf&NQ]);
+    }
     probj(f,&p->q1,q1typ(p));
     if(p->q2.flags){fprintf(f,",");probj(f,&p->q2,q2typ(p));}
     if(p->z.flags){fprintf(f,"->");probj(f,&p->z,ztyp(p));}
@@ -529,6 +589,8 @@ void pric2(FILE *f,struct IC *p)
       fprintf(f," shift-type %s%s",(p->typf2&UNSIGNED)?"unsigned ":"",typname[p->typf2&NQ]);
     if(p->code==ADDI2P||p->code==SUBIFP||p->code==SUBPFP||p->code==ADDRESS)
       fprintf(f," ptype=%s%s",(p->typf2&UNSIGNED)?"unsigned ":"",typname[p->typf2&NQ]);
+    if(p->code==ASSIGN||p->code==PUSH)
+      if(p->typf2) fprintf(f," align=%d\n",p->typf2);
   }
   if(p->code==CALL){
     fprintf(f," =>");
@@ -537,7 +599,7 @@ void pric2(FILE *f,struct IC *p)
     else{
       int i;
       for(i=0;i<p->call_cnt;i++)
-	fprintf(f," %s",p->call_list[i].v->identifier);
+        fprintf(f," %s",p->call_list[i].v->identifier);
     }
   }
   fprintf(f,"\n");
@@ -639,110 +701,117 @@ void emitzld(FILE *f,zldouble x)
   emit(f,"fp-constant");
 }
 
-static struct memblock {struct memblock *next,*prev;void *p;} *first_mb,*last_mb;
+static struct memblock {struct memblock *next;void *p;} *first_mb;
 
 static void add_mb(void *p)
 {
+  struct memblock *mb_second=first_mb;
   struct memblock *mb=malloc(sizeof(*mb));
   if(!mb){
     error(12);
     raus();
   }
-  if(last_mb){
-    last_mb->next=mb;
-    mb->prev=last_mb;
-    last_mb=mb;
-    mb->next=0;
-    mb->p=p;
-  }else{
-    last_mb=first_mb=mb;
-    mb->next=mb->prev=0;
-    mb->p=p;
-  }
+  first_mb=mb;
+  mb->next=mb_second;
+  mb->p=p;
 }  
 
 static void remove_mb(void *p)
 {
+  struct memblock *mb_prev=0;
   struct memblock *mb=first_mb;
   while(mb){
     if(mb->p==p){
-      if(mb==first_mb)
-	first_mb=mb->next;
-      else
-	mb->prev->next=mb->next;
-      if(mb==last_mb)
-	last_mb=mb->prev;
-      else
-	mb->next->prev=mb->prev;
+      if(mb_prev==0) first_mb=mb->next;
+      else mb_prev->next=mb->next;
       (free)(mb);
       return;
     }
+    mb_prev=mb;
     mb=mb->next;
   }
   ierror(0);
 }
 
 void *mymalloc(size_t size)
-/*  Belegt Speicher mit Abfrage.    */
+/*  Allocate memory and quit on failure.  */
 {
-  void *p;static int safe;
-  /*  Um ein Fehlschlagen bei size==0 zu vermeiden; nicht sehr schoen,    */
-  /*  aber das einfachste...                                              */
-  if(size==0) size=1;
+  void *p;
   if(dmalloc)
     size+=sizeof(size);
+  else if(size==0)
+    /* Not very nice, but simplest way to avoid a failure when size==0. */
+    size=1;
   if(!(p=malloc(size))){
     error(12);
     raus();
   }
-  if(dmalloc){
-    memset(p,0xaa,size);
-    *(size_t *)p=size;
-    if(DEBUG&32768) {printf("malloc %p (s=%lu)\n",p,(unsigned long)size);fflush(stdout);}
-    if(DEBUG&65536) add_mb(p);
-    return ((char *)p)+sizeof(size);
-  }else{
-    if(DEBUG&32768) {printf("malloc %p (s=%lu)\n",p,(unsigned long)size);fflush(stdout);}
-    if(DEBUG&65536) add_mb(p);
-    return p;
+  if(DEBUG&32768){
+    printf("malloc %p (s=%lu)\n",p,(unsigned long)size);
+    fflush(stdout);
   }
+  if(DEBUG&65536) add_mb(p);
+  if(dmalloc){
+    *(size_t *)p=size;
+    p=((char *)p)+sizeof(size);
+    memset(p,0xaa,size-sizeof(size));
+  } 
+  return p;
 }
+
 void *myrealloc(void *p,size_t size)
+/*  Reallocate memory and quit on failure.  */
 {
   void *new;
   if(!p) return mymalloc(size);
   if(dmalloc){
     size+=sizeof(size);
-    new=realloc(((char *)p)-sizeof(size),size+sizeof(size));
+    new=realloc(((char *)p)-sizeof(size),size);
     if(!new){
       error(12);
       raus();
     }
+    if(DEBUG&32768){
+      printf("realloc %p to %p (s=%lu)\n",p,new,(unsigned long)size);
+      fflush(stdout);
+    }
+    if(DEBUG&65536){
+      remove_mb(p);
+      add_mb(new);
+    }
     *(size_t *)new=size;
     new=((char *)new)+sizeof(size);
+    return new;
   }else{
     new=realloc(p,size);
     if(!new){
       error(12);
       raus();
     }
+    if(DEBUG&32768){
+      printf("realloc %p to %p (s=%lu)\n",p,new,(unsigned long)size);
+      fflush(stdout);
+    }
+    if(DEBUG&65536){
+      remove_mb(p);
+      add_mb(new);
+    }
+    return new;
   }
-  if(DEBUG&32768) {printf("realloc %p (s=%lu)\n",p,(unsigned long)size);fflush(stdout);}
-  if(DEBUG&65536){
-    if(p) remove_mb(p);
-    add_mb(new);
-  }
-  return new;
 }
+
 void myfree(void *p)
 {
   if(p&&dmalloc){
-    memset(((char*)p)-sizeof(size_t),0xbb,*(size_t*)(((char*)p)-sizeof(size_t)));
     p=((char*)p)-sizeof(size_t);
+    memset(p,0xbb,*(size_t *)(p));
   }
-  if(DEBUG&32768) {printf("free %p\n",p);fflush(stdout);}
+  if(DEBUG&32768){
+    printf("free %p\n",p);
+    fflush(stdout);
+  }
   if((DEBUG&65536)&&p) remove_mb(p);
-  (free)(p);
+  (free)(p);  /* supp.h has #define free(x) myfree(x) */
 }
 
 char *mystrdup(char *p)
@@ -758,19 +827,19 @@ int collides(struct obj *x,struct obj *y)
     int x1,x2,y1,y2;
     if(!(x->flags&REG)||!(y->flags&REG)) return 0;
     if(reg_pair(x->reg,&rp)){
-	x1=rp.r1;x2=rp.r2;
+        x1=rp.r1;x2=rp.r2;
     }else{
-	x1=x->reg;x2=-1;
+        x1=x->reg;x2=-1;
     }
     if(reg_pair(y->reg,&rp)){
-	y1=rp.r1;y2=rp.r2;
+        y1=rp.r1;y2=rp.r2;
     }else{
-	y1=y->reg;y2=-2;
+        y1=y->reg;y2=-2;
     }
     if(x1==y1||x1==y2||x2==y1||x2==y2)
-	return 1;
+        return 1;
     else
-	return 0;
+        return 0;
 }
 
 /* Versucht, ein IC so zu drehen, dass q2 und z kein gemeinsames */
@@ -802,14 +871,14 @@ void probj(FILE *f,struct obj *p,int t)
   if(p->flags&VAR) {
     printval(f,&p->val,MAXINT);
     if(p->flags&REG){
-	fprintf(f,"+%s",regnames[p->reg]);
+        fprintf(f,"+%s",regnames[p->reg]);
     }else if(p->v->storage_class==AUTO||p->v->storage_class==REGISTER){
-	fprintf(f,"+%ld(FP)", zm2l(p->v->offset));
+        fprintf(f,"+%ld(FP)", zm2l(p->v->offset));
     }else{
       if(p->v->storage_class==STATIC){
-	fprintf(f,"+L%ld",zm2l(p->v->offset));
+        fprintf(f,"+L%ld",zm2l(p->v->offset));
       }else{
-	fprintf(f,"+_%s",p->v->identifier);
+        fprintf(f,"+_%s",p->v->identifier);
       }
     }
     if(*p->v->identifier)
@@ -891,6 +960,8 @@ void prd(FILE *o,struct Typ *p)
   }
   if(ISPOINTER(f)) {fprintf(o,"%s to ",typname[f&NQ]);prd(o,p->next);return;}
   if(ISARRAY(f)) {fprintf(o,"%s [size %ld] of ",typname[f&NQ],zm2l(p->size));prd(o,p->next);return;}
+  if(ISVECTOR(f)) {fprintf(o,"vector [size %ld] of %s",zm2l(p->size),typname[VECTYPE(f)&NQ]);return;}
+
   fprintf(o,"%s",typname[f&NQ]);
 }
 void print_var(FILE *o,struct Var *p)
@@ -907,7 +978,7 @@ int get_first_base_type(struct Typ *t)
 {
   if (!t) return 0;
   if (ISARRAY(t->flags)) {
-	return get_first_base_type(t->next);
+        return get_first_base_type(t->next);
   } else if ((ISSTRUCT(t->flags)) || (ISUNION(t->flags))) {
     return get_first_base_type((*t->exact->sl)[0].styp);
   } else return t->flags;
@@ -1180,10 +1251,10 @@ void emit(FILE *f,const char *fmt,...)
       if(emit_l>=EMIT_BUF_DEPTH) emit_l=0;
       emit_p=emit_buffer[emit_l];
       if(emit_l==emit_f){
-	/* FIXME: error check */
-	fputs(emit_buffer[emit_f],f);
-	emit_f++;
-	if(emit_f>=EMIT_BUF_DEPTH) emit_f=0;
+        /* FIXME: error check */
+        fputs(emit_buffer[emit_f],f);
+        emit_f++;
+        if(emit_f>=EMIT_BUF_DEPTH) emit_f=0;
       }
     }
   }
@@ -1232,7 +1303,7 @@ struct case_table *calc_case_table(struct IC *p,double min_density)
     }
     for(j=0;j<num;j++){
       if(!compare_const(&vals[j],&p->q2.val,t)){
-	return 0; /* FIXME? Could simply ignore? */
+        return 0; /* FIXME? Could simply ignore? */
       }
     }
     vals[num]=p->q2.val;
@@ -1246,31 +1317,31 @@ struct case_table *calc_case_table(struct IC *p,double min_density)
     num++;
     if(t&UNSIGNED){
       if(zumleq(vumax,min.vumax))
-	insert_const(&min,UNSIGNED|MAXINT);
+        insert_const(&min,UNSIGNED|MAXINT);
       if(zumleq(max.vumax,vumax))
-	insert_const(&max,UNSIGNED|MAXINT);
+        insert_const(&max,UNSIGNED|MAXINT);
       cur_density=num/(1+zld2d(zum2zld(zumsub(max.vumax,min.vumax))));
       if(cur_density>=min_density){
-	ct.num=num;
-	ct.next_ic=p;
-	ct.min=min;
-	ct.max=max;
-	ct.diff=zumsub(max.vumax,min.vumax);
-	ct.density=cur_density;
+        ct.num=num;
+        ct.next_ic=p;
+        ct.min=min;
+        ct.max=max;
+        ct.diff=zumsub(max.vumax,min.vumax);
+        ct.density=cur_density;
       }
     }else{
       if(zmleq(vmax,min.vmax))
-	insert_const(&min,MAXINT);
+        insert_const(&min,MAXINT);
       if(zmleq(max.vmax,vmax))
-	insert_const(&max,MAXINT);
+        insert_const(&max,MAXINT);
       cur_density=num/zld2d(zum2zld((1+zumsub(zm2zum(max.vmax),zm2zum(min.vmax)))));
       if(cur_density>=min_density){
-	ct.num=num;
-	ct.next_ic=p;
-	ct.min=min;
-	ct.max=max;
-	ct.diff=zumsub(zm2zum(max.vmax),zm2zum(min.vmax));
-	ct.density=cur_density;
+        ct.num=num;
+        ct.next_ic=p;
+        ct.min=min;
+        ct.max=max;
+        ct.diff=zumsub(zm2zum(max.vmax),zm2zum(min.vmax));
+        ct.density=cur_density;
       }
     }
   }
@@ -1299,8 +1370,8 @@ void emit_jump_table(FILE *f,struct case_table *ct,char *da,char *labprefix,int 
     for(i=0;i<ct->num;i++){
       eval_const(&ct->vals[i],ct->typf);
       if(zmeqto(vmax,zm)&&zumeqto(vumax,zum)){
-	emit(f,"%s%d\n",labprefix,ct->labels[i]);
-	break;
+        emit(f,"%s%d\n",labprefix,ct->labels[i]);
+        break;
       }
     }
     if(i>=ct->num)
@@ -1325,8 +1396,10 @@ zmax va_offset(struct Var *v)
   zmax offset=l2zm(0L);
   struct reg_handle rh=empty_reg_handle;
   for(i=0;i<v->vtyp->exact->count;i++){
+#if 0
     if((*v->vtyp->exact->sl)[i].reg!=0)
       continue;
+#endif
     if(((*v->vtyp->exact->sl)[i].styp->flags&NQ)==VOID)
       ierror(0);
     if(reg_parm(&rh,(*v->vtyp->exact->sl)[i].styp,0,v->vtyp)!=0)
@@ -1386,7 +1459,7 @@ int calc_regs(struct IC *p,int showwarnings)
   if(p->call_cnt){
     for(i=0;i<p->call_cnt;i++){
       if(p->call_list[i].v->fi&&(p->call_list[i].v->fi->flags&ALL_REGS)){
-	bvunite(regs_modified,p->call_list[i].v->fi->regs_modified,RSIZE);
+        bvunite(regs_modified,p->call_list[i].v->fi->regs_modified,RSIZE);
 #if HAVE_OSEK
 /* removed */
 /* removed */
@@ -1402,15 +1475,15 @@ int calc_regs(struct IC *p,int showwarnings)
 /* removed */
 #endif
       }else{
-	int r;
-	for(r=1;r<=MAXR;r++) if(regscratch[r]) BSET(regs_modified,r);
-	err_ic=p;
-	if(!p->call_list[i].v->fi) p->call_list[i].v->fi=new_fi();
-	if(!(p->call_list[i].v->fi->flags&WARNED_REGS)){
-	  error(318,p->call_list[i].v->identifier);
-	  p->call_list[i].v->fi->flags|=WARNED_REGS;
-	}
-	return 0;
+        int r;
+        for(r=1;r<=MAXR;r++) if(regscratch[r]) BSET(regs_modified,r);
+        err_ic=p;
+        if(!p->call_list[i].v->fi) p->call_list[i].v->fi=new_fi();
+        if(!(p->call_list[i].v->fi->flags&WARNED_REGS)){
+          error(318,p->call_list[i].v->identifier);
+          p->call_list[i].v->fi->flags|=WARNED_REGS;
+        }
+        return 0;
       }
     }
     return 1;
@@ -1418,6 +1491,8 @@ int calc_regs(struct IC *p,int showwarnings)
   err_ic=p;if(showwarnings) error(320);
   return 0;
 }
+
+
 
 #ifndef HAVE_TARGET_BFLAYOUT
 int bflayout(int bfoffset,int bfsize,int t)

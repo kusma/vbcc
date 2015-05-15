@@ -43,7 +43,8 @@ void translation_unit(void)
   struct Var *p;
   if(cross_module){
     for(p=first_ext;p;p=p->next)
-      p->flags|=NOTINTU;
+      if(!(p->flags&BUILTIN))
+	p->flags|=NOTINTU;
   }
   while(1){
     killsp();
@@ -95,18 +96,20 @@ void reserve_reg(char *p)
 void dontwarn(char *p)
 /*  schaltet flags fuer Meldung auf DONTWARN    */
 {
-  int i;
   if(*p!='=') error(4,"-dontwarn");
-  i=atoi(p+1);
-  if(i>=err_num) error(159,i);
-  if(i<0){
-    for(i=0;i<err_num;i++)
-      if(!(err_out[i].flags&(ANSIV|FATAL)))
-	err_out[i].flags|=DONTWARN;
-    return;
-  }
-  if(err_out[i].flags&(ANSIV|FATAL)) error(160,i);
-  err_out[i].flags|=DONTWARN;
+  do{
+    int i=atoi(p+1);
+    if(i>=err_num) error(159,i);
+    if(i<0){
+      for(i=0;i<err_num;i++)
+        if(!(err_out[i].flags&(ANSIV|FATAL)))
+    err_out[i].flags|=DONTWARN;
+      return;
+    }
+    if(err_out[i].flags&(ANSIV|FATAL)) error(160,i);
+    err_out[i].flags|=DONTWARN;
+    p=strchr(p+1,',');
+  } while(p);
 }
 
 
@@ -575,6 +578,8 @@ int main(int argc,char *argv[])
   if(c_flags[45]&USEDFLAG) {ecpp=1;}
   if(c_flags[46]&USEDFLAG) {short_push=1;}
   if(c_flags[47]&USEDFLAG) {default_unsigned=1;}
+  if(c_flags[48]&USEDFLAG) {opencl=1;}
+
 
   if(wpo){
     cross_module=1;
@@ -609,6 +614,9 @@ int main(int argc,char *argv[])
   if(!init_cg()) exit(EXIT_FAILURE);
   if(zmeqto(stackalign,l2zm(0L)))
     stackalign=maxalign;
+  for(i=0;i<=MAX_TYPE;i++)
+    if(zmeqto(align[i],l2zm(0L)))
+      align[i]=l2zm(1L);
   for(i=0;i<EMIT_BUF_DEPTH;i++)
     emit_buffer[i]=mymalloc(EMIT_BUF_LEN);
   emit_p=emit_buffer[0];
@@ -1176,7 +1184,7 @@ void next_token(void)
   if(misracheck&&ctok->type!=PRAGMA&&ctok->type!=NONE&&ctok->type!=NEWLINE&&ctok->type!=COMMENT)
     misratok=1;
   /*FIXME: do not store multiple */
-  if(filename!=current_filename){
+  if(filename!=current_filename&&strcmp(filename,current_filename)){
     filename=mymalloc(strlen(current_filename)+1);
     strcpy(filename,current_filename);
   }
@@ -1769,6 +1777,8 @@ void error(int errn,...)
 {
   va_list vl;
   va_start(vl,errn);
+  if(errn==0)
+    printf("error=0\n");
   do_error(errn,vl);
   va_end(vl);
 }
