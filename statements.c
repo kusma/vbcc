@@ -234,6 +234,8 @@ void if_statement(void)
 	  cexpr=0;
 	if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)&&cexpr) free_reg(tree->o.reg);
 	if(tree->o.flags&&!cexpr){
+	  gen_test(&tree->o,tree->ntyp->flags,BEQ,lfalse);
+#if 0
 	  new=new_IC();
 	  new->code=TEST;
 	  new->q1=tree->o;
@@ -244,6 +246,7 @@ void if_statement(void)
 	  new->code=BEQ;
 	  new->typf=lfalse;
 	  add_IC(new);
+#endif
 	}
 	if(cexpr==2){
 	  new=new_IC();
@@ -556,13 +559,13 @@ void while_statement(void)
 /*  bearbeitet while_statement                                  */
 {
   np tree;int lloop,lin,lout,cm,cexpr,contm,breakm;
-  struct IC *new,*mic; int line;char *file;
+  struct IC *new,*mic; int line,tvalid;char *file;
   killsp();
   if(ctok->type==LPAR) {next_token();killsp();} else error(151);
   tree=expression();
   cexpr=0;
   if(tree){
-    if(type_expression(tree)){
+    if(tvalid=type_expression(tree)){
 #ifdef HAVE_MISRA
 /* removed */
 #endif
@@ -585,20 +588,25 @@ void while_statement(void)
   if(!cexpr||tree->sidefx) cont_label=lin; else cont_label=lloop;
   if(!cexpr||tree->sidefx){
     if(c_flags_val[0].l&2){ /*  bei Optimierung */
-      gen_IC(tree,lloop,lout);
-      if(tree->o.flags){
-	new=new_IC();
-	new->code=TEST;
-	new->typf=tree->ntyp->flags;
-	new->q1=tree->o;
-	new->q2.flags=new->z.flags=0;
-	add_IC(new);
-	new=new_IC();
-	new->code=BEQ;
-	new->typf=lout;
-	add_IC(new);
+      if(tvalid){
+	gen_IC(tree,lloop,lout);
+	if(tree->o.flags){
+	  gen_test(&tree->o,tree->ntyp->flags,BEQ,lout);
+#if 0
+	  new=new_IC();
+	  new->code=TEST;
+	  new->typf=tree->ntyp->flags;
+	  new->q1=tree->o;
+	  new->q2.flags=new->z.flags=0;
+	  add_IC(new);
+	  new=new_IC();
+	  new->code=BEQ;
+	  new->typf=lout;
+	  add_IC(new);
+#endif
+	}
+	repair_tree(tree);
       }
-      repair_tree(tree);
     }else{
       new=new_IC();
       new->code=BRA;
@@ -648,6 +656,8 @@ void while_statement(void)
       if((tree->o.flags&(SCRATCH|REG))==(SCRATCH|REG)&&cexpr) free_reg(tree->o.reg);
     }
     if(tree->o.flags&&!cexpr){
+      gen_test(&tree->o,tree->ntyp->flags,BNE,lloop);
+#if 0
       new=new_IC();
       new->code=TEST;
       new->typf=tree->ntyp->flags;
@@ -658,6 +668,7 @@ void while_statement(void)
       new->code=BNE;
       new->typf=lloop;
       add_IC(new);
+#endif
     }
     if(cexpr==2){
       new=new_IC();
@@ -677,7 +688,7 @@ void while_statement(void)
 void for_statement(void)
 /*  bearbeitet for_statement                                    */
 {
-  np tree1=0,tree2=0,tree3=0;int lloop,lin,lout,cm,cexpr=0,contm,breakm,with_decl;
+  np tree1=0,tree2=0,tree3=0;int lloop,lin,lout,cm,cexpr=0,contm,breakm,with_decl,tvalid;
   struct IC *new,*mic;int line;char *file;
   killsp();
   if(ctok->type==LPAR) {next_token();killsp();} else error(59);
@@ -728,7 +739,7 @@ void for_statement(void)
     }
   }
   if(tree2){
-    if(type_expression(tree2)){
+    if(tvalid=type_expression(tree2)){
 #ifdef HAVE_MISRA
 /* removed */
 #endif
@@ -751,20 +762,25 @@ void for_statement(void)
   cont_label=++label;break_label=lout;
   if(!cexpr||(tree2&&tree2->sidefx)){
     if(c_flags_val[0].l&2){ /*  bei Optimierung */
-      gen_IC(tree2,lloop,lout);
-      if(tree2->o.flags){
-	new=new_IC();
-	new->code=TEST;
-	new->typf=tree2->ntyp->flags;
-	new->q1=tree2->o;
-	new->q2.flags=new->z.flags=0;
-	add_IC(new);
-	new=new_IC();
-	new->code=BEQ;
-	new->typf=lout;
-	add_IC(new);
+      if(tvalid){
+	gen_IC(tree2,lloop,lout);
+	if(tree2->o.flags){
+	  gen_test(&tree2->o,tree2->ntyp->flags,BEQ,lout);
+#if 0
+	  new=new_IC();
+	  new->code=TEST;
+	  new->typf=tree2->ntyp->flags;
+	  new->q1=tree2->o;
+	  new->q2.flags=new->z.flags=0;
+	  add_IC(new);
+	  new=new_IC();
+	  new->code=BEQ;
+	  new->typf=lout;
+	  add_IC(new);
+#endif
+	}
+	repair_tree(tree2);
       }
-      repair_tree(tree2);
     }else{
       new=new_IC();
       new->code=BRA;
@@ -828,6 +844,8 @@ void for_statement(void)
       if((tree2->o.flags&(SCRATCH|REG))==(SCRATCH|REG)&&cexpr) free_reg(tree2->o.reg);
     }
     if(tree2->o.flags&&!cexpr){
+      gen_test(&tree2->o,tree2->ntyp->flags,BNE,lloop);
+#if 0
       new=new_IC();
       new->code=TEST;
       new->typf=tree2->ntyp->flags;
@@ -838,6 +856,7 @@ void for_statement(void)
       new->code=BNE;
       new->typf=lloop;
       add_IC(new);
+#endif
     }
     if(cexpr==2){
       new=new_IC();
@@ -915,6 +934,8 @@ void do_statement(void)
 	}else{
 	  gen_IC(tree,lloop,lout);
 	  if(tree->o.flags){
+	    gen_test(&tree->o,tree->ntyp->flags,BNE,lloop);
+#if 0
 	    new=new_IC();
 	    new->code=TEST;
 	    new->typf=tree->ntyp->flags;
@@ -925,6 +946,7 @@ void do_statement(void)
 	    new->code=BNE;
 	    new->typf=lloop;
 	    add_IC(new);
+#endif
 	  }
 	}
       }else error(143);

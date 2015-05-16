@@ -21,7 +21,7 @@ char *g_flags_name[MAXGF]={"cpu","fpu","const-in-data","sd","merge-constants","f
                            "elf","amiga-align","no-regnames","no-peephole","setccs",
                            "use-lmw","poweropen","sc","madd","eabi","gas",
 			   "no-align-args","conservative-sr","use-commons",
-                           "baserel32os4","baserel32mos"};
+                           "baserel32os4","baserel32mos","oldlibcalls"};
 union ppi g_flags_val[MAXGF];
 
 /*  Alignment-requirements for all types in bytes.              */
@@ -115,6 +115,7 @@ char *g_attr_name[]={"__far","__near","__chip","__saveds","__rfi","__saveall",
 #define USE_COMMONS (g_flags[19]&USEDFLAG)
 #define BASERELOS4 (g_flags[20]&USEDFLAG)
 #define BASERELMOS (g_flags[21]&USEDFLAG)
+#define OLDLIBCALLS (g_flags[22]&USEDFLAG)
 
 
 static char *mregnames[MAXR+1];
@@ -132,6 +133,9 @@ static char *marray[]={"__section(x,y)=__vattr(\"section(\"#x\",\"#y\")\")",
 		       "__linearvarargs=__attr(\"linearvarargs;\")",
 		       "__interrupt=__rfi __saveall",
 		       0};
+
+const int r4=5,r5=6,r6=7,r3r4=74,r5r6=75;
+
 
 static int r0=1;                   /*  special register                    */
 static int r2=3;                   /*  reserved or toc                     */
@@ -423,7 +427,7 @@ static void load_reg(FILE *f,int r,struct obj *o,int typ,int tmp)
       if(l)
 	emit(f,"\taddi\t%s,%s,%ld\n",mregnames[r],mregnames[r],l);
     }else{
-      emit(f,"\tli\t%s,%ld\n",mregnames[r],zm2l(vmax));
+      emit(f,"\tli\t%s,%ld\n",mregnames[r],lo(vmax));
     }
     return;
   }
@@ -1618,8 +1622,8 @@ static int get_reg()
 
 static int handle_llong(FILE *f,struct IC *p)
 {
-  const int r3=4,r4=5,r5=6,r6=7,r3r4=74,r5r6=75;
   int c=p->code,t,savemask=0;char *libfuncname;
+  int msp;long mtmpoff;
 
   t=(ztyp(p)&NU);
 
@@ -2075,12 +2079,20 @@ static int handle_llong(FILE *f,struct IC *p)
 
   create_loadable(f,&p->q1,t1);
 
-  if(tmpoff>=32768) ierror(0);
+  if(tmpoff>=32768&&(regs[r3]||regs[r4]||regs[r5]||regs[r6])){
+    emit(f,"\taddis\t%s,%s,%ld\n",mregnames[t2],mregnames[sp],hi(tmpoff));
+    if(lo(tmpoff)) emit(f,"\taddi\t%s,%s,%ld\n",mregnames[t2],mregnames[t2],lo(tmpoff));
+    msp=t2;
+    mtmpoff=0;
+  }else{
+    msp=sp;
+    mtmpoff=tmpoff;
+  }
 
-  if(regs[r3]){ emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r3],tmpoff-4,mregnames[sp]);savemask|=1;}
-  if(regs[r4]){ emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r4],tmpoff-8,mregnames[sp]);savemask|=2;}
-  if(regs[r5]) {emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r5],tmpoff-12,mregnames[sp]);savemask|=4;}
-  if(regs[r6]) {emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r6],tmpoff-16,mregnames[sp]);savemask|=8;}
+  if(regs[r3]){ emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r3],mtmpoff-4,mregnames[msp]);savemask|=1;}
+  if(regs[r4]){ emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r4],mtmpoff-8,mregnames[msp]);savemask|=2;}
+  if(regs[r5]) {emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r5],mtmpoff-12,mregnames[msp]);savemask|=4;}
+  if(regs[r6]) {emit(f,"\tstw\t%s,%ld(%s)\n",mregnames[r6],mtmpoff-16,mregnames[msp]);savemask|=8;}
 
   if((p->q1.flags&(REG|DREFOBJ))==(REG|DREFOBJ)&&p->q1.reg>=r3&&p->q1.reg<=r6){
     emit(f,"\tmr\t%s,%s\n",mregnames[t1],mregnames[p->q1.reg]);
@@ -2110,8 +2122,8 @@ static int handle_llong(FILE *f,struct IC *p)
     create_loadable(f,&p->q2,t2);
     if((q2typ(p)&NQ)==LLONG){
       if(isreg(q2)&&p->q2.reg==r3r4){
-	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r5],tmpoff-4,mregnames[sp]);
-	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r6],tmpoff-8,mregnames[sp]);
+	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r5],mtmpoff-4,mregnames[msp]);
+	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r6],mtmpoff-8,mregnames[msp]);
       }else{
 	if(p->q2.am&&p->q2.am->base==r5){
 	  if(p->q2.am->flags==REG_IND&&p->q2.am->offset==r6) ierror(0);
@@ -2126,7 +2138,7 @@ static int handle_llong(FILE *f,struct IC *p)
     }else{
       if((q2typ(p)&NQ)>=LLONG) ierror(0);
       if(isreg(q2)&&p->q2.reg==r3){
-	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r5],tmpoff-4,mregnames[sp]);
+	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r5],mtmpoff-4,mregnames[msp]);
       }else{
 	load_reg(f,r5,&p->q2,q2typ(p),0);
       }      
@@ -2172,13 +2184,13 @@ static int handle_llong(FILE *f,struct IC *p)
        (p->z.reg==r5&&(savemask&4))||
        (p->z.reg==r6&&(savemask&8))){
       if(p->z.reg==r3)
-	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],tmpoff-4,mregnames[sp]);
+	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],mtmpoff-4,mregnames[msp]);
       else if(p->z.reg==r4)
-	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],tmpoff-8,mregnames[sp]);
+	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],mtmpoff-8,mregnames[msp]);
       else if(p->z.reg==r5)
-	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],tmpoff-12,mregnames[sp]);
+	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],mtmpoff-12,mregnames[msp]);
       else if(p->z.reg==r6)
-	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],tmpoff-16,mregnames[sp]);
+	emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[t1],mtmpoff-16,mregnames[msp]);
       else
 	ierror(0);
       p->z.reg=t1;
@@ -2209,13 +2221,13 @@ static int handle_llong(FILE *f,struct IC *p)
   }
 
   if(savemask&1)
-    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r3],tmpoff-4,mregnames[sp]);
+    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r3],mtmpoff-4,mregnames[msp]);
   if(savemask&2)
-    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r4],tmpoff-8,mregnames[sp]);
+    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r4],mtmpoff-8,mregnames[msp]);
   if(savemask&4)
-    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r5],tmpoff-12,mregnames[sp]);
+    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r5],mtmpoff-12,mregnames[msp]);
   if(savemask&8)
-    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r6],tmpoff-16,mregnames[sp]);
+    emit(f,"\tlwz\t%s,%ld(%s)\n",mregnames[r6],mtmpoff-16,mregnames[msp]);
   
   return 1;
 }
@@ -2326,6 +2338,15 @@ int init_cg(void)
   if(BASERELOS4) bssname="\t.bss\n";
 
   target_macros=marray;
+
+  declare_builtin("__mulint64",LLONG,LLONG,r3r4,LLONG,r5r6,1,0);
+  declare_builtin("__divsint64",LLONG,LLONG,r3r4,LLONG,r5r6,1,0);
+  declare_builtin("__divuint64",UNSIGNED|LLONG,UNSIGNED|LLONG,r3r4,UNSIGNED|LLONG,r5r6,1,0);
+  declare_builtin("__modsint64",LLONG,LLONG,r3r4,LLONG,r5r6,1,0);
+  declare_builtin("__moduint64",UNSIGNED|LLONG,UNSIGNED|LLONG,r3r4,UNSIGNED|LLONG,r5r6,1,0);
+  declare_builtin("__lshint64",LLONG,LLONG,r3r4,INT,r5,1,0);
+  declare_builtin("__rshsint64",LLONG,LLONG,r3r4,INT,r5,1,0);
+  declare_builtin("__rshuint64",LLONG,UNSIGNED|LLONG,r3r4,INT,r5,1,0);
 
   return 1;
 }
@@ -3316,7 +3337,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
       }else{
         if((p->q1.flags&(VAR|DREFOBJ))==VAR){
           if(!strcmp("__va_start",p->q1.v->identifier)){
-            emit(f,"\taddi\t%s,%s,%lu\n",mregnames[r3],mregnames[sp],framesize+minframe+zm2l(va_offset(v))+vparmos);
+            emit(f,"\taddi\t%s,%s,%lu\n",mregnames[r3],mregnames[sp],framesize+minframe+zm2l(va_offset(v))/*+vparmos*/);
             BSET(regs_modified,r3);continue;
           }
           if(!strcmp("__va_regbase",p->q1.v->identifier)){
@@ -3768,6 +3789,33 @@ void mark_eff_ics(void)
       p->flags&=~EFF_IC;
   }
 }
+
+char *use_libcall(int c,int t,int t2)
+{
+  static char fname[32];
+  char *ret=0;
+
+  if(OLDLIBCALLS) return 0;
+
+  if((t&NQ)==LLONG){
+    ret=fname;
+    if(c==MULT)
+      sprintf(fname,"__mulint64");
+    else if(c==DIV)
+      sprintf(fname,"__div%cint64",(t&UNSIGNED)?'u':'s');
+    else if(c==MOD)
+      sprintf(fname,"__mod%cint64",(t&UNSIGNED)?'u':'s');
+    else if(c==RSHIFT)
+      sprintf(fname,"__rsh%cint64",(t&UNSIGNED)?'u':'s');
+    else if(c==LSHIFT)
+      sprintf(fname,"__lshint64");
+    else
+      ret=0;
+  }
+  return ret;
+}
+
+
 
 #if HAVE_OSEK
 /* removed */

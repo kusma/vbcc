@@ -1,4 +1,7 @@
 /*  $VER: vbcc (declaration.c) V0.8     */
+
+#include <string.h>
+
 #include "vbcc_cpp.h"
 #include "vbc.h"
 
@@ -61,7 +64,7 @@ extern void optimize(long,struct Var *);
 
 static void clear_main_ret(void)
 {
-  if(c99&&!strcmp(cur_func,"main")&&ISSCALAR(return_typ->flags)){
+  if(c99&&!strcmp(cur_func,"main")&&return_typ&&ISSCALAR(return_typ->flags)){
     /* in c99, main returns 0 if it falls from back */
     struct IC *new=new_IC();
     new->code=SETRETURN;
@@ -106,6 +109,24 @@ static char *get_string(void)
   return p;
 }
 
+/* checks whether string is a valid vector type */
+/* returns the dimension */
+static int check_vect(char *s,char *base)
+{
+  int i=strlen(base),dim;
+  if(strncmp(s,base,i)) return 0;
+  dim=s[i];
+  if(dim=='2'||dim=='3'||dim=='4'||dim=='8'){
+    if(s[i+1]==0)
+      return dim-'0';
+    else
+      return 0;
+  }
+  if(s[i]=='1'&&s[i+1]=='6'&&s[i+2]==0)
+    return 16;
+  return 0;
+}
+
 int settyp(int typnew, int typold)
 /* Unterroutine fuer declaration_specifiers().              */
 {
@@ -144,6 +165,7 @@ struct Typ *declaration_specifiers(void)
   struct struct_list (*sl)[];
   size_t slsz;
   struct Var *v;
+  int dim;
 #ifdef HAVE_TARGET_ATTRIBUTES
   unsigned long tattr=0;
 #endif
@@ -582,8 +604,6 @@ struct Typ *declaration_specifiers(void)
 /* removed */
 /* removed */
 /* removed */
-/* removed */
-/* removed */
 #endif
           ident=imerk;
 					add_sl(ssd,sl);
@@ -717,6 +737,46 @@ struct Typ *declaration_specifiers(void)
         next_token();
         if(type_qualifiers&VOLATILE) error(58);
         type_qualifiers|=VOLATILE;notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"bool"))){
+	next_token();
+	typ=settyp(VECBOOL+dim-1,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"char"))){
+	next_token();
+	typ=settyp(VECCHAR+dim-1,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"uchar"))){
+	next_token();
+	typ=settyp((VECCHAR+dim-1)|UNSIGNED,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"short"))){
+	next_token();
+	typ=settyp(VECSHORT+dim-1,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"ushort"))){
+	next_token();
+	typ=settyp((VECSHORT+dim-1)|UNSIGNED,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"int"))){
+	next_token();
+	typ=settyp(VECINT+dim-1,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"uint"))){
+	next_token();
+	typ=settyp((VECINT+dim-1)|UNSIGNED,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"long"))){
+	next_token();
+	typ=settyp(VECLONG+dim-1,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"ulong"))){
+	next_token();
+	typ=settyp((VECLONG+dim-1)|UNSIGNED,typ);
+	notdone=1;
+      }else if(opencl&&(dim=check_vect(ctok->name,"float"))){
+	next_token();
+	typ=settyp(VECFLOAT+dim-1,typ);
+	notdone=1;
 #if 0
       }else if(c99&&!strcmp("restrict",ctok->name)){
         next_token();
@@ -1114,7 +1174,7 @@ struct Typ *direct_declarator(struct Typ *a)
       if(!ffreturn(a)&&(a->flags&NQ)!=VOID){
 	rpointer.flags=POINTER_TYPE(a);
         rpointer.next=a;
-        if(!reg_parm(&reg_handle,&rpointer,0,0)) ierror(0);
+        reg_parm(&reg_handle,&rpointer,0,0);
       }
 #endif
 #ifdef HAVE_MISRA
@@ -1551,7 +1611,7 @@ static void create_allocvl(struct Var *v)
   }
 
   /* make room on the stack */
-  ds=mymalloc(NODES);
+  ds=new_node();
   ds->flags=IDENTIFIER;
   ds->identifier=empty;
   ds->dsize=vlength_szof(v->vtyp);
@@ -1627,7 +1687,7 @@ void freevl(void)
     gen_label(return_label);
     did_return_label=1;
   }
-  ds=mymalloc(NODES);
+  ds=new_node();
   ds->flags=IDENTIFIER;
   ds->identifier=empty;
   ds->dsize=block_vla[nesting];
@@ -1797,7 +1857,7 @@ void vla_jump_fix(void)
 	if(DEBUG&1) printf("generating sp-adjust\n");
         merkfic=first_ic;merklic=last_ic;
 	first_ic=0;last_ic=0;
-	ds=mymalloc(NODES);
+	ds=new_node();
 	ds->flags=IDENTIFIER;
 	ds->identifier=empty;
 	ds->dsize=p->savedsp;
@@ -2008,6 +2068,33 @@ struct Var *add_var(char *identifier, struct Typ *t, int storage_class,struct co
     if((storage_class&OLDSTYLE)&&f==FLOAT){
       /*  Bei alten Funktionen werden DOUBLE nach FLOAT konvertiert   */
       if(!(storage_class&REGPARM)){
+#if HAVE_LIBCALLS
+	static struct Typ dt={DOUBLE},ft={FLOAT};
+	static struct node n,nn;
+	struct IC *conv=new_IC();
+	n.flags=REINTERPRET;
+	n.left=&nn;
+	n.ntyp=&dt;
+	nn.flags=IDENTIFIER;
+	nn.identifier=identifier;
+	nn.ntyp=&ft;
+	nn.o.flags=VAR|DONTREGISTERIZE;
+	nn.o.v=new;
+	nn.o.val.vmax=l2zm(0L);
+	n.o=nn.o;
+	convert(&n,FLOAT);
+	
+
+	conv->code=ASSIGN;
+	conv->typf=FLOAT;
+	conv->q1=n.o;
+	conv->z.v=new;
+	conv->z.flags=VAR;
+	conv->z.val.vmax=l2zm(0L);
+	conv->q2.val.vmax=sizetab[FLOAT];
+	conv->z.v=new;
+	add_IC(conv);	
+#else
 	struct IC *conv=new_IC();
 	conv->code=CONVERT;
 	conv->typf=FLOAT;
@@ -2018,6 +2105,7 @@ struct Var *add_var(char *identifier, struct Typ *t, int storage_class,struct co
 	conv->q1.v=conv->z.v=new;
 	conv->q1.val.vmax=conv->z.val.vmax=l2zm(0);
 	add_IC(conv);
+#endif
       }
       new->flags|=CONVPARAMETER;
     }
@@ -2214,6 +2302,7 @@ void var_declaration(void)
 /* removed */
 #endif
   ts=declaration_specifiers();notdone=1;
+
   storage_class=return_sc;hard_reg=return_reg;vattr=return_vattr;
   inline_flag=return_inline;
 #ifdef HAVE_ECPP
@@ -2317,7 +2406,10 @@ void var_declaration(void)
           error(27,vident);
         }else{
           if(t&&v->vtyp&&!compatible_types(v->vtyp,t,NU|CONST|VOLATILE)){
-            error(68,vident);
+	    if(ISFUNC(t->flags)&&!ISFUNC(v->vtyp->flags))
+	      error(361,vident);
+	    else
+	      error(68,vident);
 #ifdef HAVE_MISRA
 /* removed */
 #endif
@@ -2625,7 +2717,7 @@ void var_declaration(void)
       add_sl(t->exact,&sl);
       nesting++;
     }
-    if(om&&!compare_sd(om->exact,t->exact)) {
+    if(om&&om->exact&&!compare_sd(om->exact,t->exact)) {
       error(123);
 #ifdef HAVE_MISRA
 /* removed */
@@ -2650,9 +2742,12 @@ void var_declaration(void)
         rt->flags=POINTER_TYPE(return_typ);rt->next=return_typ;
 #ifdef HAVE_REGPARMS
         reg=reg_parm(&reg_handle,rt,0,v->vtyp);
-        if(!reg) ierror(0);
-        return_var=add_var(empty,clone_typ(rt),reg<0?(AUTO|PARAMETER|REGPARM|DBLPUSH|oldstyle):(AUTO|PARAMETER|REGPARM|oldstyle),0);
-        return_var->reg=reg;
+        if(!reg){
+	  return_var=add_var(empty,clone_typ(rt),AUTO|PARAMETER|oldstyle,0);
+	}else{
+	  return_var=add_var(empty,clone_typ(rt),reg<0?(AUTO|PARAMETER|REGPARM|DBLPUSH|oldstyle):(AUTO|PARAMETER|REGPARM|oldstyle),0);
+	  return_var->reg=reg;
+	}
 #else
         return_var=add_var(empty,clone_typ(rt),AUTO|PARAMETER|oldstyle,0);
 #endif
@@ -2734,6 +2829,22 @@ void var_declaration(void)
 /* removed */
 /* removed */
 #endif
+
+    if(c99){
+      /* c99 predefined __func__ */
+      struct Typ *ft=new_typ();
+      struct Var *fnc;
+
+      /* create type */
+      ft->flags=ARRAY;
+      ft->size=l2zm((long)strlen(cur_func)+1);
+      ft->next=new_typ();
+      ft->next->flags=CONST|CHAR;
+
+      /* use string_expression() to create const_list */
+      fnc=add_var("__func__",ft,STATIC,cl_from_string(cur_func,cur_func+strlen(cur_func)));
+      fnc->flags|=DEFINED;
+    }
 
     /* Generate intermediate code for function */
     compound_statement();
@@ -2954,6 +3065,7 @@ void gen_vars(struct Var *v)
         if(p->storage_class==STATIC||p->storage_class==EXTERN){
           if(!(p->flags&GENERATED)){
             if(p->storage_class==EXTERN&&!(p->flags&(USEDASSOURCE|USEDASDEST))&&!(p->flags&(TENTATIVE|DEFINED))) continue;
+	if(p->storage_class==STATIC&&p->nesting>0&&!(p->flags&(USEDASSOURCE|USEDASDEST))) continue;
             /*  erst konstante initialisierte Daten */
             if(mode==0){
               if(!p->clist) continue;
@@ -3318,6 +3430,53 @@ struct const_list *designator(struct Typ *t,struct const_list *cl)
   return 0;
 }
 
+/* declare a builtin function with up to two scalar arguments */
+struct Var *declare_builtin(char *name,int ztyp,int q1typ,int q1reg,int q2typ,int q2reg,int nosidefx,char *asm)
+{
+  struct struct_declaration *sd;
+  struct Typ *t;
+  struct Var *v;
+  int args;
+  if(!(v=find_ext_var(name))){
+    sd=mymalloc(sizeof(*sd));
+    if(q1typ==0) args=1;
+    else if(q2typ!=0) args=3;
+    else args=2;
+    sd->sl=mymalloc(args*sizeof(struct struct_list));
+    memset(sd->sl,0,args*sizeof(struct struct_list));
+    sd->count=args;
+    if(q1typ){
+      (*sd->sl)[0].styp=new_typ();
+      (*sd->sl)[0].styp->flags=q1typ;
+      (*sd->sl)[0].reg=q1reg;
+    }
+    if(q2typ){
+      (*sd->sl)[1].styp=new_typ();
+      (*sd->sl)[1].styp->flags=q2typ;
+      (*sd->sl)[1].reg=q2reg;
+    }
+    (*sd->sl)[args-1].styp=new_typ();
+    (*sd->sl)[args-1].styp->flags=VOID;
+    t=new_typ();
+    t->flags=FUNKT;
+    t->exact=add_sd(sd,FUNKT);
+    t->next=new_typ();
+    t->next->flags=ztyp;
+    v=add_var(name,t,EXTERN,0);
+    v->flags|=BUILTIN;
+    if(asm||nosidefx){
+      v->fi=new_fi();
+      if(asm) v->fi->inline_asm=asm;
+      if(nosidefx){
+	v->fi->call_cnt=v->fi->use_cnt=v->fi->change_cnt=0;
+	v->fi->flags=ALL_CALLS|ALL_USES|ALL_MODS|ALWAYS_RETURNS|NOSIDEFX;
+      }
+    }
+  }
+  return v;
+}
+
+
 struct const_list *initialization(struct Typ *t,int noconst,int level,int desi,struct struct_declaration *fstruct,struct const_list *first)
 /*  Traegt eine Initialisierung in eine const_list ein.         */
 {
@@ -3388,6 +3547,9 @@ struct const_list *initialization(struct Typ *t,int noconst,int level,int desi,s
 	  push_token(&mtok);
 	}
       }
+
+      if(bracket&&zmeqto(i,l2zm(0L))) error(360);
+
 #ifdef HAVE_MISRA
 /* removed */
 /* removed */
@@ -3449,6 +3611,9 @@ struct const_list *initialization(struct Typ *t,int noconst,int level,int desi,s
 	push_token(&mtok);
       }
     }
+
+    if(bracket&&zmeqto(i,l2zm(0L))) error(360);
+
 #ifdef HAVE_MISRA
 /* removed */
 /* removed */
