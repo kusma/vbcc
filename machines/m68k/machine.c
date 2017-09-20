@@ -2327,6 +2327,8 @@ static void assign(FILE *f,struct IC *p,struct obj *q,struct obj *z,int c,long s
 	zreg=8;
       }else{
 	emit(f,"\tsub%s.%s\t#%ld,%s\n",quick[s<=8],strshort[s<=32767],(long)s,mregnames[sp]);
+	push(size);
+	size=0;
 	if(!regavailable(0))
 	  zreg=pget_reg(f,0,p);
 	else

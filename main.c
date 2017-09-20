@@ -408,7 +408,8 @@ static void do_clist_calls(struct const_list *cl)
     if(cl->tree&&(cl->tree->o.flags&VARADR)){
       struct Var *v=cl->tree->o.v;
       if(ISFUNC(v->vtyp->flags)){
-	printf(":: %s\n",v->identifier);
+	if(DEBUG&1)
+	  printf(":: %s\n",v->identifier);
 	do_function(v);
       }
     }

@@ -597,7 +597,7 @@ static FILE *find_file(char *name, int localdir)
 			: current_filename;
 
 		for (i = strlen(rfn) - 1; i >= 0; i --)
-#if defined(MSDOS) || defined(ATARI)
+#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
 			if (rfn[i] == '\\') break;
 #elif defined AMIGA
 			if (rfn[i] == '/' || rfn[i] == ':') break;
@@ -605,7 +605,7 @@ static FILE *find_file(char *name, int localdir)
 			if (rfn[i] == '/') break;
 #endif
 
-#if defined(MSDOS) || defined(ATARI)
+#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
 		if (i >= 0 && *name != '\\' && (nl < 2 || name[1] != ':'))
 #elif defined AMIGA
 		if (i >= 0 && strchr(name,':') == 0)
