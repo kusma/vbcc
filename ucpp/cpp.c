@@ -32,6 +32,7 @@
 #ifdef HAVE_MISRA
 void misra(int,...);
 #endif
+extern void handle_deps(char *,int);
 
 #define VERS_MAJ	1
 #define VERS_MIN	0
@@ -1185,6 +1186,7 @@ do_include_next:
 	if (!strcmp("time.h",fname)) misra(127,20,12,-1);
 #endif
 	set_current_filename(fname);
+	handle_deps(fname,string_fname);
 	enter_file(ls, flags);
 	return 0;
 

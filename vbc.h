@@ -183,7 +183,7 @@ extern void scratch_var(struct obj *,int,struct Typ *);
 extern void get_scratch(struct obj *,int,int,struct Typ *);
 extern void gen_cond(struct obj *,int,int,int);
 
-#define MAXCF 50
+#define MAXCF 60
 extern int c_flags[MAXCF];
 extern char *c_flags_name[MAXCF];
 extern union ppi c_flags_val[MAXCF];

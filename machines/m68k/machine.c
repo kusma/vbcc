@@ -5098,7 +5098,11 @@ int emit_peephole(void)
        sscanf(asmline[0],"\tmove.l\t%c%d,%c%d\n%c",&c3,&r3,&c4,&r4,&e)==4&&
        c1==c4&&r1==r4&&c2==c3&&r2==r3&&r1>=0&&r1<=7&&r2>=0&&r2<=7&&
        (c1=='a'||c1=='d')&&(c2=='a'||c2=='d')){
-      remove_asm();
+      /* create tst instruction if condition codes of address register are needed */
+      if(c1=='d'&&c2=='a'&&cc_set!=0&&(cc_set->flags&(REG|DREFOBJ))==REG&&cc_set->reg==a0+r2)
+	sprintf(asmline[0],"\ttst.l\t%s\n",mregnames[d0+r1]);
+      else
+	remove_asm();
       savedemit++;
       return 1;
     }

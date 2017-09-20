@@ -12,6 +12,27 @@ int line,errors;
 bvtype task_preempt_regs[RSIZE/sizeof(bvtype)];
 bvtype task_schedule_regs[RSIZE/sizeof(bvtype)];
 char *multname[]={"","s"};
+
+struct deplist {char *name; struct deplist *next;} *deps;
+FILE *depout;
+void handle_deps(char *name,int string)
+{
+  struct deplist *p=deps;
+  if(!depout||!name||!*name) return;
+  /* by default omit <...> includes */
+  if(!string&&!(c_flags[51]&USEDFLAG)) return;
+  while(p){
+    if(!strcmp(p->name,name)) return;
+    p=p->next;
+  }
+  p=mymalloc(sizeof(*p));
+  p->name=mymalloc(strlen(name)+1);
+  strcpy(p->name,name);
+  p->next=deps;
+  deps=p;
+  fprintf(depout," %s",name);
+}
+
 void raus(void)
 /*  Beendet das Programm                                            */
 {
@@ -681,6 +702,13 @@ int main(int argc,char *argv[])
       ungetc(first_byte,in);
       input_wpo=0;
     }
+    if(c_flags[50]&USEDFLAG){
+      char *p;
+      depout=open_out(inname,"dep");
+      /* nicht super schoen (besser letzten Punkt statt ersten), aber kurz.. */
+      for(p=inname;*p&&*p!='.';p++) fprintf(depout,"%c",*p);
+      fprintf(depout,".o: %s",inname);
+    }
     if(c_flags[18]&USEDFLAG) ppout=open_out(inname,"i");
     if(!input_wpo){
       int mcmerk=misracheck;
@@ -729,6 +757,7 @@ int main(int argc,char *argv[])
     translation_unit();
     fclose(in); /*FIXME: do I have to close??*/   
     if((c_flags[18]&USEDFLAG)&&ppout) fclose(ppout);
+    if((c_flags[50]&USEDFLAG)&&depout){fprintf(depout,"\n");fclose(depout);}
     if(!input_wpo)
       free_lexer_state(&ls);
   }
@@ -1718,7 +1747,7 @@ static int pp_line;
 void do_error(int errn,va_list vl)
 /*  Behandelt Ausgaben wie Fehler und Meldungen */
 {
-    int type;
+  int type,have_stack=0;
     char *errstr="",*txt=filename;
     if(c_flags_val[8].l&&c_flags_val[8].l<=errors)
       return;
@@ -1737,6 +1766,8 @@ void do_error(int errn,va_list vl)
     }else if(type&(INFUNC|INIC)){
       if((type&INIC)&&err_ic&&err_ic->line){
 	fprintf(stderr,"%s %d in line %d of \"%s\": ",errstr,errn,err_ic->line,err_ic->file);
+
+
       }else{
 	fprintf(stderr,"%s %d in function \"%s\": ",errstr,errn,cur_func);
       }
@@ -1763,9 +1794,18 @@ void do_error(int errn,va_list vl)
 	  if(c==':'||c=='/'||c=='\\') txt=p;
       }
       fprintf(stderr,"%s %d in line %d of \"%s\": ",errstr,errn,n,txt);
+      have_stack=1; /* we can report the include stack */
     }
     vfprintf(stderr,err_out[errn].text,vl);
     fprintf(stderr,"\n");
+    if(have_stack&&(!(c_flags[49]&USEDFLAG))){
+      int i;
+      struct stack_context *sc = report_context();
+      for(i=0;;i++){
+	if(sc[i].line==-1) break;
+	fprintf(stderr,"\tincluded from file \"%s\":%ld\n",sc[i].long_name?sc[i].long_name:sc[i].name,sc[i].line);
+      }
+    }
     if(type&ERROR){
       errors++;
       if(c_flags_val[8].l&&c_flags_val[8].l<=errors&&!(type&NORAUS))
