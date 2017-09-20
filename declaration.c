@@ -1147,7 +1147,7 @@ struct Typ *direct_declarator(struct Typ *a)
           }else{
             eval_constn(tree);
             p->size=vmax;
-            if(zmeqto(p->size,l2zm(0L))) {error(61);p->size=l2zm(1L);}
+            if(zmleq(p->size,l2zm(0L))) {error(61);p->size=l2zm(1L);}
           }
         }
         free_expression(tree);

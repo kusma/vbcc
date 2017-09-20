@@ -1,7 +1,7 @@
-/*  $VER: vbcc (vars.c) V0.8    */
+/*  $VER: vbcc (vars.c) V0.9    */
 #include "vbc.h"
 #ifdef AMIGA
-static const char *__ver="$VER: vbcc 0.9e (07.02.2016)\r\n";
+static const char *__ver="$VER: vbcc 0.9f (28.03.2017)\r\n";
 long __stack=65536;
 #endif
 char *s,*ident;
@@ -46,7 +46,7 @@ int c_flags[MAXCF]={
     VALFLAG,VALFLAG,0,VALFLAG,0,
     FUNCFLAG,FUNCFLAG,FUNCFLAG,0,
     0,0,0,0,
-    0,0
+    0,0,0
 };
 char *c_flags_name[MAXCF]={
     "O","o","ic1","ic2",
@@ -60,7 +60,7 @@ char *c_flags_name[MAXCF]={
     "misra","coloring","dmalloc","disable","soft-float",
     "misrawarn","misradontwarn","reserve-reg","ecpp",
     "short-push","unsigned-char","opencl","no-include-stack",
-    "deps","deps-for-libs"
+    "deps","deps-for-libs","no-cpp-warn"
 };
 union ppi c_flags_val[MAXCF];
 char *inname;
@@ -87,4 +87,4 @@ struct ecpp_dtor_list *ecpp_dlist[MAXN];
 #endif
 
 char *cur_func="shouldn't happen!";
-char *copyright="vbcc V0.9e (c) in 1995-2016 by Volker Barthelmann";
+char *copyright="vbcc V0.9f (c) in 1995-2017 by Volker Barthelmann";

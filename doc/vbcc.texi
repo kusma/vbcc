@@ -13,7 +13,7 @@
 
 This is the manual for the vbcc compiler system.
 
-Copyright 1995-2011 Volker Barthelmann
+Copyright 1995-2017 Volker Barthelmann
 
 @end ifinfo
 
@@ -74,13 +74,16 @@ Copyright 1995-2011 Volker Barthelmann
 
 @section Legal
 
-    vbcc is copyright in 1995-2011 by Volker Barthelmann.
+    vbcc is copyright in 1995-2017 by Volker Barthelmann.
 
     This archive may be redistributed without modifications and used
     for non-commercial purposes.
 
-    Distributing modified versions and commercial usage needs my written
-    consent.
+    An exception for commercial usage is granted, provided that the target
+    CPU is M68k and the target OS is AmigaOS. Resulting binaries may be
+    distributed commercially without further licensing.
+
+    In all other cases you need my written consent.
 
     This copyright applies to vc, vbcc and vsc.
 
@@ -278,8 +281,9 @@ assign >NIL: vlibwos: vbcc:target/ppc-warpos/lib
     The general naming-scheme for these files ist <target>_<host>.
 
     Available config files, when all targets are installed, are
-    @file{aos68k} (AmigaOS on M68k), @file{aosppc} (AmigaOS4 on PPC using
-    vclib), @file{newlib} (AmigaOS4 on PPC using newlib), @file{morphos}
+    @file{aos68k} (AmigaOS on M68k), @file{kick13} (Kickstart 1.x on M68k),
+    @file{aosppc} (AmigaOS4 on PPC using vclib),
+    @file{newlib} (AmigaOS4 on PPC using newlib), @file{morphos}
     (PPC systems running MorphOS), @file{powerup} (PPC boards using the
     PowerUp system), @file{warpos} (PPC boards using the WarpOS system).
 
@@ -345,7 +349,7 @@ assign >NIL: vlibwos: vbcc:target/ppc-warpos/lib
     If your program uses floating point, you may have to link with a
     math-library. The details are dependent on the target, but usually
     @option{-lm} will be suitable (for AmigaOS on m68k choose one of
-    @option{-lmieee}, @option{-lm881} or @option{-lm040}).
+    @option{-lmieee}, @option{-lm881}, @option{-lm040} or @option{-lm060}).
 
 @example 
         vc calc.c -o calc -lmieee

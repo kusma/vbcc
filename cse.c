@@ -339,15 +339,13 @@ int cse(struct flowgraph *fg,int global)
         while(p){
             i=p->expindex;
             if(i>=0&&!is_volatile_ic(p)){
+	        int t=ztyp(p);
                 if(i>=ecount) ierror(0);
-                if(BTST(ae,i)){
+                if(BTST(ae,i)&&ISSCALAR(t)){
                     if(DEBUG&1024){ printf("can eliminate common subexpression:\n");pric2(stdout,p);}
                     /*  Hilfsvariable erzeugen  */
                     new=new_typ();
-                    if(p->code==ADDRESS||p->code==ADDI2P||p->code==SUBIFP) 
-		      new->flags=p->typf2;
-		    else 
-		      new->flags=p->typf;
+		    new->flags=t;
                     if(p->code==COMPARE||p->code==TEST) new->flags=0;
                     if(ISPOINTER(new->flags)){
                         new->next=new_typ();

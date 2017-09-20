@@ -1,4 +1,4 @@
-/*  $VER: vbcc (main.c) V0.8    */
+/*  $VER: vbcc (main.c) V0.9    */
 #include "vbcc_cpp.h"
 #include "vbc.h"
 #include "opt.h"
@@ -550,6 +550,7 @@ int main(int argc,char *argv[])
   if(c_flags[13]&USEDFLAG) ucpp_flags|=CPLUSPLUS_COMMENTS;
   if(c_flags[14]&USEDFLAG) ucpp_flags|=CPLUSPLUS_COMMENTS;
   if(c_flags[15]&USEDFLAG) ucpp_flags&=~HANDLE_TRIGRAPHS;
+  if(c_flags[52]&USEDFLAG) ucpp_flags&=~(WARN_STANDARD|WARN_ANNOYING);
   if(c_flags[16]&USEDFLAG) no_inline_peephole=1;
   if(c_flags[17]&USEDFLAG) final=1;
   if(!(c_flags[8]&USEDFLAG)) c_flags_val[8].l=10; /* max. Fehlerzahl */
@@ -1528,18 +1529,24 @@ void do_pragma(char *s)
     /* packing of structures */
     s+=4;pragma_killsp();
     if(*s=='(') { s++;pragma_killsp();}
-    if(*s==')'||!strncmp("pop",s,3)){
-      if(pidx>0) pack_align=pack[--pidx];
-    }else{
-      int p=0;
-      sscanf(s,"%i",&p);
+    if(!strncmp("push",s,4)){
       if(pidx==PACKSTACKSIZE){
         memmove(pack,pack+1,(PACKSTACKSIZE-1)*sizeof(pack[0]));
         pidx--;
       }
       pack[pidx++]=pack_align;
-      pack_align=p;
-    }
+      s+=4;pragma_killsp();
+      if(*s==','){
+        s++;pragma_killsp();
+        sscanf(s,"%i",&pack_align);
+      }
+    }else if(!strncmp("pop",s,3)){
+      if(pidx>0) pack_align=pack[--pidx];
+      else pack_align=0;
+    }else if(*s==')')
+      pack_align=0;
+    else
+      sscanf(s,"%i",&pack_align);
 #if 0
   }else if(!strncmp("type",s,4)){
     /*  Typ eines Ausdrucks im Klartext ausgeben    */
@@ -1817,8 +1824,6 @@ void error(int errn,...)
 {
   va_list vl;
   va_start(vl,errn);
-  if(errn==0)
-    printf("error=0\n");
   do_error(errn,vl);
   va_end(vl);
 }

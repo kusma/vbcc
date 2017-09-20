@@ -719,12 +719,17 @@ np string_expression(void)
 	}
 	if(flag){*p++=val;continue;}
 	if(*s=='x'){
+	  int warned=0;
 	  s++;val=0;
 	  while((*s>='0'&&*s<='9')||(*s>='a'&&*s<='f')||(*s>='A'&&*s<='F')){
 	    val=val*16;
 	    if(*s>='0'&&*s<='9') val+=*s-'0';
 	    if(*s>='a'&&*s<='f') val+=*s-'a'+10;
 	    if(*s>='A'&&*s<='F') val+=*s-'A'+10;
+	    if(!warned&&((unsigned long)val)>zum2ul(tu_max[CHAR])){
+	      error(364);
+	      warned=1;
+	    }
 	    s++;
 	  }
 	  *p++=val;continue;

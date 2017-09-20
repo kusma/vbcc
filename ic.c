@@ -14,6 +14,7 @@ np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2);
 
 static void handle_reglist(struct regargs_list *,struct obj *);
 
+
 #if HAVE_LIBCALLS
 /* avoid calling use_libcall with illegal operands */
 static char *use_libcall_wrap(int c,int t,int t2)
@@ -459,6 +460,30 @@ void add_IC(struct IC *new)
         last_ic=new;first_ic=new;new->prev=0;
     }
     ic_count++;
+
+#if HAVE_POF2OPT
+    if(((new->code==MULT)||((new->code==DIV||new->code==MOD)&&(new->typf&UNSIGNED)))&&(new->q2.flags&KONST)){
+      /*  ersetzt mul etc. mit Zweierpotenzen     */
+      long ln;
+      eval_const(&new->q2.val,new->typf);
+      if(zmleq(l2zm(0L),vmax)&&zumleq(ul2zum(0UL),vumax)){
+	if(ln=get_pof2(vumax)){
+	  if(new->code==MOD){
+	    vmax=zmsub(vmax,l2zm(1L));
+	    new->code=AND;
+	  }else{
+	    if(new->code==DIV) new->code=RSHIFT; else new->code=LSHIFT;
+	    vmax=l2zm(ln-1);
+	  }
+	  gval.vmax=vmax;
+	  eval_const(&gval,MAXINT);
+	  insert_const(&new->q2.val,new->typf);
+	  new->typf2=new->typf;
+	}
+      }
+    }
+#endif
+
     /*  Merken, on Fliesskomma benutzt wurde    */
     if(code!=LABEL&&(code<BEQ||code>BRA)){
         if(ISFLOAT(new->typf)) float_used=1;
@@ -620,6 +645,29 @@ void gen_IC(np p,int ltrue,int lfalse)
         p->o=p->left->o;
         return;
     }
+
+#if HAVE_POF2OPT
+    if(((p->flags==MULT||p->flags==PMULT)||((p->flags==DIV||p->flags==MOD)&&(p->ntyp->flags&UNSIGNED)))&&(p->right->flags==CEXPR||p->right->flags==PCEXPR)){
+      /*  ersetzt mul etc. mit Zweierpotenzen     */
+      long ln;
+      eval_constn(p->right);
+      if(zmleq(l2zm(0L),vmax)&&zumleq(ul2zum(0UL),vumax)){
+	if(ln=get_pof2(vumax)){
+	  if(p->flags==MOD){
+	    vmax=zmsub(vmax,l2zm(1L));
+	    p->flags=AND;
+	  }else{
+	    if(p->flags==DIV) p->flags=RSHIFT; else p->flags=LSHIFT;
+	    vmax=l2zm(ln-1);
+	  }
+	  gval.vmax=vmax;
+	  eval_const(&gval,MAXINT);
+	  insert_constn(p->right);
+	}
+      }
+    }
+#endif
+
 #if HAVE_LIBCALLS
     if(!(optflags&2)){
       char *libname;
@@ -2519,6 +2567,7 @@ int do_arith(np p,struct IC *new,np dest,struct obj *o)
         keep_reg(dest->o.reg);
       */
     }
+
     return f;
 }
 void savescratch(int code,struct IC *p,int dontsave,struct obj *o)

@@ -1446,7 +1446,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
     ret="rts"; /*FIXME: banked */
   if(DEBUG&1) printf("gen_code()\n");
   for(p2=p;p2;p2=p2->next) clear_ext_ic(&p2->ext);
-  if(!g_flags[5]&USEDFLAG){
+  if(!(g_flags[5]&USEDFLAG)){
     peephole(p);
     if(!frame_used) offset=l2zm(0L);
   }

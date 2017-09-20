@@ -19,6 +19,8 @@ bin/vprof: vprof/vprof.c
 
 doc/vbcc.pdf:
 	texi2dvi --pdf doc/vbcc.texi
+	rm -f vbcc.cp vbcc.fn vbcc.vr vbcc.tp vbcc.ky vbcc.pg vbcc.toc \
+	      vbcc.aux vbcc.log
 
 doc/vbcc.html:
 	(cd doc;texi2html -split=chapter -nosec_nav -frames vbcc.texi)

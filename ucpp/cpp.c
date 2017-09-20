@@ -241,7 +241,7 @@ static void init_found_files(void)
 /*
  * convert a Unix-style path for the host architecture
  */
-#if defined(MSDOS) || defined(ATARI)
+#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
 static char *convert_path(char *path)
 {
 	/* on msdos systems, replace all / by \ */
@@ -1186,7 +1186,7 @@ do_include_next:
 	if (!strcmp("time.h",fname)) misra(127,20,12,-1);
 #endif
 	set_current_filename(fname);
-	handle_deps(fname,string_fname);
+	handle_deps(current_long_filename,string_fname);
 	enter_file(ls, flags);
 	return 0;
 
