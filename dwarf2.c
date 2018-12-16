@@ -521,7 +521,7 @@ static struct dwarf2_line_info *dwarf2_first_li,*dwarf2_last_li;
 
 static void dwarf2_add_line(int file,int line,int label,char *id)
 {
-  struct dwarf2_line_info *new;
+  struct dwarf2_line_info *new,*p,*lp;
   new=mymalloc(sizeof(*new));
   new->file=file;
   new->line=line;
@@ -533,12 +533,27 @@ static void dwarf2_add_line(int file,int line,int label,char *id)
     new->id=0;
   }
   new->next=0;
+#if 0
+  for(lp=p=dwarf2_first_li;p;p=p->next){
+    if(p!=lp&&p->file==file&&p->line>=line){
+      new->next=lp->next;
+      lp->next=new;
+      return;
+    }
+    lp=p;
+  }
+#endif
   if(dwarf2_last_li){
     dwarf2_last_li->next=new;
     dwarf2_last_li=new;
   }else{
     dwarf2_first_li=dwarf2_last_li=new;
   }
+#if 0
+  printf("linfo:\n");
+  for(p=dwarf2_first_li;p;p=p->next)
+    printf("li: line=%d\n",p->line);
+#endif
 }
 
 static void dwarf2_setup(int sa,char *dwarfd1s,char *dwarfd2s,char *dwarfd4s,char *das,char *lps,char *ips,char *ds)
@@ -793,6 +808,8 @@ static void dwarf2_var(FILE *f,struct Var *v)
 {
   char *p;int l;
   if(!(v->flags&(DEFINED|TENTATIVE))) return;
+  if(v->storage_class==STATIC&&v->nesting>0&&!(v->flags&(USEDASSOURCE|USEDASDEST))) return;
+
   if(ISFUNC(v->vtyp->flags)) return;
   if(*v->identifier&&v->storage_class!=TYPEDEF){
     l=dwarf2_type(f,v->vtyp);

@@ -32,6 +32,7 @@
 #ifdef HAVE_MISRA
 void misra(int,...);
 #endif
+extern void handle_deps(char *,int);
 
 #define VERS_MAJ	1
 #define VERS_MIN	0
@@ -240,7 +241,7 @@ static void init_found_files(void)
 /*
  * convert a Unix-style path for the host architecture
  */
-#if defined(MSDOS) || defined(ATARI)
+#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
 static char *convert_path(char *path)
 {
 	/* on msdos systems, replace all / by \ */
@@ -596,7 +597,7 @@ static FILE *find_file(char *name, int localdir)
 			: current_filename;
 
 		for (i = strlen(rfn) - 1; i >= 0; i --)
-#if defined(MSDOS) || defined(ATARI)
+#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
 			if (rfn[i] == '\\') break;
 #elif defined AMIGA
 			if (rfn[i] == '/' || rfn[i] == ':') break;
@@ -604,7 +605,7 @@ static FILE *find_file(char *name, int localdir)
 			if (rfn[i] == '/') break;
 #endif
 
-#if defined(MSDOS) || defined(ATARI)
+#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
 		if (i >= 0 && *name != '\\' && (nl < 2 || name[1] != ':'))
 #elif defined AMIGA
 		if (i >= 0 && strchr(name,':') == 0)
@@ -1185,6 +1186,7 @@ do_include_next:
 	if (!strcmp("time.h",fname)) misra(127,20,12,-1);
 #endif
 	set_current_filename(fname);
+	handle_deps(current_long_filename,string_fname);
 	enter_file(ls, flags);
 	return 0;
 

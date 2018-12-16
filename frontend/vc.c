@@ -1,5 +1,5 @@
 /*  Frontend for vbcc                       */
-/*  (c) in 1995-2014 by Volker Barthelmann  */
+/*  (c) in 1995-2016 by Volker Barthelmann  */
 /*  #define AMIGA for Amiga version         */
 /*  #define ATARI for Atari version         */
 
@@ -387,6 +387,7 @@ int main(int argc,char *argv[])
     int tfl,i,len=10,pm,count,db=0,staticmode=0;
     char *parm;
     long opt=1;
+    int rc=EXIT_SUCCESS;
 
     for(i=1;i<argc;i++){
         if(argv[i][0]=='+'){
@@ -514,7 +515,7 @@ int main(int argc,char *argv[])
       userlibs[slen]=' ';
     }
     if(flags&VERBOSE){
-      printf("vc frontend for vbcc (c) in 1995-2014 by Volker Barthelmann\n");
+      printf("vc frontend for vbcc (c) in 1995-2016 by Volker Barthelmann\n");
 #ifdef SPECIAL_COPYRIGHT
       printf("%s\n",SPECIAL_COPYRIGHT);
 #endif
@@ -567,7 +568,9 @@ int main(int argc,char *argv[])
 #ifdef AMIGA
         if(pm&&parm!=cmfiles)
             if(MatchFirst((STRPTR)convert_path(parm),ap)){
-                printf("No match for %s\n",parm);continue;
+                printf("No match for %s\n",parm);
+                rc=RETURN_WARN;
+                continue;
             }
 #endif
         do{
@@ -771,5 +774,5 @@ int main(int argc,char *argv[])
         if(objfile) remove(tfname);
     }
     if(!(flags&KEEPSCRATCH)) del_scratch(first_scratch);
-    raus(0);
+    raus(rc);
 }

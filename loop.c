@@ -1035,7 +1035,8 @@ void strength_reduction(struct flowgraph *start,struct flowgraph *end,struct flo
     for(p=g->start;p;p=p->next){
       int c=p->code;
       if(c==ADD||c==ADDI2P||c==SUB||c==SUBIFP){
-	if(!compare_objs(&p->q1,&p->z,p->typf)){
+	/* TODO: what is possible/useful with floating point induction variables? */
+	if(!compare_objs(&p->q1,&p->z,p->typf)&&!ISFLOAT(p->typf)){
 	  if(DEBUG&1024){printf("possible induction:\n");pric2(stdout,p);}
 	  if(p->q2.flags&VAR){
 	    i=p->q2.v->index;

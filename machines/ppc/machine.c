@@ -1795,7 +1795,7 @@ static int handle_llong(FILE *f,struct IC *p)
     char *sh;
     struct IC *b;
     if(multiple_ccs)
-      ierror(0);
+      ierror(0); /* still needed? */
     else
       p->z.reg=cr0;
     b=p->next;
@@ -1806,7 +1806,7 @@ static int handle_llong(FILE *f,struct IC *p)
       sh="cmplw";
     else
       sh="cmpw";
-    if((c==BNE||c==BEQ)&&(p->q2.flags&KONST)){
+    if((c==BNE||c==BEQ)&&(p->q2.flags&KONST)&&p->z.reg==cr0){
       eval_const(&p->q2.val,q2typ(p));
       if(zmeqto(vmax,l2zm(0L))&&zumeqto(vumax,ul2zum(0UL))){
 	if(isreg(q1)){
@@ -3492,7 +3492,11 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
       }
       if(c==RSHIFT&&!(t&UNSIGNED)){
         emit(f,"\tsraw%s%s\t%s,%s,",isimm[q2reg==0],record[setcc],mregnames[zreg],mregnames[q1reg]);
-        emit_obj(f,&p->q2,q2typ(p)); emit(f,"\n");
+        emit_obj(f,&p->q2,q2typ(p));
+	/* fix for illegal shift values (undefined behaviour) */
+	if(!isreg(q2))
+	  emit(f,"&31");
+	emit(f,"\n");
         ccset|=setcc;
         continue;
       }

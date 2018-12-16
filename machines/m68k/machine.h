@@ -89,7 +89,7 @@ struct reg_handle {
 
 /* support for variable-length arrays */
 #define ALLOCVLA_REG 9
-#define ALLOCVLA_INLINEASM "\tsub.l\td0,a7\n\tmove.l\ta7,d0"
+#define ALLOCVLA_INLINEASM "\taddq.l\t#3,d0\n\tand.b\t#252,d0\n\tsub.l\td0,a7\n\tmove.l\ta7,d0"
 #define FREEVLA_REG 0
 /* TODO: find a better solution some time */
 #define FREEVLA_INLINEASM "\tmove.l\t(a7),a7\n\tsubq.l\t#4,a7"

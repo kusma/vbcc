@@ -13,7 +13,7 @@ static char FILE_[]=__FILE__;
 /*  Public data that MUST be there.                             */
 
 /* Name and copyright. */
-char cg_copyright[]="vbcc code-generator for m68k/ColdFire V1.10 (c) in 1995-2014 by Volker Barthelmann";
+char cg_copyright[]="vbcc code-generator for m68k/ColdFire V1.11 (c) in 1995-2017 by Volker Barthelmann";
 
 /*  Commandline-flags the code-generator accepts                */
 int g_flags[MAXGF]={VALFLAG,VALFLAG,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -332,9 +332,9 @@ static int pget_reg(FILE *f,int flag,struct IC *p)
   for(i=flag;i<flag+8;i++){
     if(regs[i]==1&&(!p||(i!=p->q1.reg&&i!=p->q2.reg&&i!=p->z.reg))){
       if(p){
-	if((p->q1.am&&(p->q1.am->dreg==i||p->q1.am->basereg==i))
-	   ||(p->q2.am&&(p->q2.am->dreg==i||p->q2.am->basereg==i))
-	   ||(p->z.am&&(p->z.am->dreg==i||p->z.am->basereg==i))){
+	if((p->q1.am&&((p->q1.am->dreg&127)==i||p->q1.am->basereg==i))
+	   ||(p->q2.am&&((p->q2.am->dreg&127)==i||p->q2.am->basereg==i))
+	   ||(p->z.am&&((p->z.am->dreg&127)==i||p->z.am->basereg==i))){
 	  continue;
 	}
 	if(p->code==CALL&&is_arg_reg(p,i))
@@ -363,9 +363,9 @@ static int get_reg(FILE *f,int flag,struct IC *p)
   for(i=flag;i<flag+8;i++){
     if(regs[i]==0){
       if(p){
-	if((p->q1.am&&(p->q1.am->dreg==i||p->q1.am->basereg==i))
-	   ||(p->q2.am&&(p->q2.am->dreg==i||p->q2.am->basereg==i))
-	   ||(p->z.am&&(p->z.am->dreg==i||p->z.am->basereg==i))){
+	if((p->q1.am&&((p->q1.am->dreg&127)==i||p->q1.am->basereg==i))
+	   ||(p->q2.am&&((p->q2.am->dreg&127)==i||p->q2.am->basereg==i))
+	   ||(p->z.am&&((p->z.am->dreg&127)==i||p->z.am->basereg==i))){
 	  continue;
 	}
 	if(p->code==CALL&&is_arg_reg(p,i))
@@ -381,9 +381,9 @@ static int get_reg(FILE *f,int flag,struct IC *p)
     static struct rpair rp;
     if(regs[i]==1){
       if(p){
-	if((p->q1.am&&(p->q1.am->dreg==i||p->q1.am->basereg==i))
-	   ||(p->q2.am&&(p->q2.am->dreg==i||p->q2.am->basereg==i))
-	   ||(p->z.am&&(p->z.am->dreg==i||p->z.am->basereg==i))){
+	if((p->q1.am&&((p->q1.am->dreg&127)==i||p->q1.am->basereg==i))
+	   ||(p->q2.am&&((p->q2.am->dreg&127)==i||p->q2.am->basereg==i))
+	   ||(p->z.am&&((p->z.am->dreg&127)==i||p->z.am->basereg==i))){
 	  continue;
 	}
 	if(p->code==CALL&&is_arg_reg(p,i))
@@ -1450,9 +1450,9 @@ static int new_peephole(struct IC *first)
 	    if((p2->q1.flags&REG)&&p2->q1.reg==idx) break;
 	    if((p2->q2.flags&REG)&&p2->q2.reg==idx) break;
 	    if((p2->z.flags&REG)&&p2->z.reg==idx) break;
-	    if(p2->q1.am&&p2->q1.am->dreg==idx) break;
-	    if(p2->q2.am&&p2->q2.am->dreg==idx) break;
-	    if(p2->z.am&&p2->z.am->dreg==idx) break;
+	    if(p2->q1.am&&(p2->q1.am->dreg&127)==idx) break;
+	    if(p2->q2.am&&(p2->q2.am->dreg&127)==idx) break;
+	    if(p2->z.am&&(p2->z.am->dreg&127)==idx) break;
 	    if(c2==ALLOCREG&&p2->q1.reg==idx) break;
 	  }
 
@@ -1656,17 +1656,17 @@ static int new_peephole(struct IC *first)
 	  int src_mod=0;
 	  for(p2=p->next;p2;p2=p2->next){
 	    c2=p2->code;
-	    if(!use&&p2->q1.am&&p2->q1.am->skal==0&&p2->q1.am->dreg==r&&(!p2->q2.am||p2->q2.am->dreg!=r)&&(!p2->z.am||p2->z.am->dreg!=r)&&(!(p2->q2.flags&REG)||p2->q2.flags!=r)&&(!(p2->z.flags&REG)||p2->z.flags!=r)){
+	    if(!use&&p2->q1.am&&p2->q1.am->skal==0&&(p2->q1.am->dreg&127)==r&&(!p2->q2.am||(p2->q2.am->dreg&127)!=r)&&(!p2->z.am||(p2->z.am->dreg&127)!=r)&&(!(p2->q2.flags&REG)||p2->q2.flags!=r)&&(!(p2->z.flags&REG)||p2->z.flags!=r)){
 	      amuse=p2->q1.am;
 	      use=p2;
 	      continue;
 	    }
-	    if(!use&&p2->q2.am&&p2->q2.am->skal==0&&p2->q2.am->dreg==r&&(!p2->q1.am||p2->q1.am->dreg!=r)&&(!p2->z.am||p2->z.am->dreg!=r)&&(!(p2->q1.flags&REG)||p2->q1.flags!=r)&&(!(p2->z.flags&REG)||p2->z.flags!=r)){
+	    if(!use&&p2->q2.am&&p2->q2.am->skal==0&&(p2->q2.am->dreg&127)==r&&(!p2->q1.am||(p2->q1.am->dreg&127)!=r)&&(!p2->z.am||(p2->z.am->dreg&127)!=r)&&(!(p2->q1.flags&REG)||p2->q1.flags!=r)&&(!(p2->z.flags&REG)||p2->z.flags!=r)){
 	      amuse=p2->q2.am;
 	      use=p2;
 	      continue;
 	    }
-	    if(!use&&p2->z.am&&p2->z.am->skal==0&&p2->z.am->dreg==r&&(!p2->q2.am||p2->q2.am->dreg!=r)&&(!p2->q1.am||p2->q1.am->dreg!=r)&&(!(p2->q2.flags&REG)||p2->q2.flags!=r)&&(!(p2->z.flags&REG)||p2->z.flags!=r)){
+	    if(!use&&p2->z.am&&p2->z.am->skal==0&&(p2->z.am->dreg&127)==r&&(!p2->q2.am||(p2->q2.am->dreg&127)!=r)&&(!p2->q1.am||(p2->q1.am->dreg&127)!=r)&&(!(p2->q2.flags&REG)||p2->q2.flags!=r)&&(!(p2->z.flags&REG)||p2->z.flags!=r)){
 	      amuse=p2->z.am;
 	      use=p2;
 	      continue;
@@ -1698,9 +1698,9 @@ static int new_peephole(struct IC *first)
 	    if((p2->q1.flags&REG)&&p2->q1.reg==r) break;
 	    if((p2->q2.flags&REG)&&p2->q2.reg==r) break;
 	    if((p2->z.flags&REG)&&p2->z.reg==r) break;
-	    if(p2->q1.am&&p2->q1.am->dreg==r) break;
-	    if(p2->q2.am&&p2->q2.am->dreg==r) break;
-	    if(p2->z.am&&p2->z.am->dreg==r) break;
+	    if(p2->q1.am&&(p2->q1.am->dreg&127)==r) break;
+	    if(p2->q2.am&&(p2->q2.am->dreg&127)==r) break;
+	    if(p2->z.am&&(p2->z.am->dreg&127)==r) break;
 	    if((p2->z.flags&(REG|DREFOBJ))==REG&&(p->q1.flags&(REG|DREFOBJ))&&p2->z.reg==p->q1.reg)
 	      src_mod=1;
 	  }
@@ -1728,9 +1728,9 @@ static int new_peephole(struct IC *first)
 	if((p2->q1.flags&REG)&&p2->q1.reg==r) break;
 	if((p2->q2.flags&REG)&&p2->q2.reg==r) break;
 	if((p2->z.flags&REG)&&p2->z.reg==r) break;
-	if((am=p2->q1.am)&&(am->basereg==r||am->dreg==r)) break;
-	if((am=p2->q2.am)&&(am->basereg==r||am->dreg==r)) break;
-	if((am=p2->z.am)&&(am->basereg==r||am->dreg==r)) break;
+	if((am=p2->q1.am)&&(am->basereg==r||(am->dreg&127)==r)) break;
+	if((am=p2->q2.am)&&(am->basereg==r||(am->dreg&127)==r)) break;
+	if((am=p2->z.am)&&(am->basereg==r||(am->dreg&127)==r)) break;
       }
     }
   }
@@ -2301,6 +2301,7 @@ static void assign(FILE *f,struct IC *p,struct obj *q,struct obj *z,int c,long s
     a1=alignment(q);
     if(c!=PUSH)  a2=alignment(z); else a2=0;
     if(a1<0||a2<0) {a1=1;a2=2;}
+    if(p->typf2==2||p->typf2==4) {a1=a2=0;}
     if((c==PUSH||(scratch&1))&&(q->flags&(REG|DREFOBJ))==(REG|DREFOBJ)&&q->reg>=1&&q->reg<=8&&!q->am){
       qreg=q->reg;
       if(c==PUSH&&(a1&1)==0&&(a2&1)==0)
@@ -2326,6 +2327,8 @@ static void assign(FILE *f,struct IC *p,struct obj *q,struct obj *z,int c,long s
 	zreg=8;
       }else{
 	emit(f,"\tsub%s.%s\t#%ld,%s\n",quick[s<=8],strshort[s<=32767],(long)s,mregnames[sp]);
+	push(size);
+	size=0;
 	if(!regavailable(0))
 	  zreg=pget_reg(f,0,p);
 	else
@@ -2400,13 +2403,13 @@ static int muststore(struct IC *p,int r)
       return 0;
     if((p->q1.flags&REG)&&p->q1.reg==r)
       return 1;
-    if(p->q1.am&&(p->q1.am->basereg==r||p->q1.am->dreg==r))
+    if(p->q1.am&&(p->q1.am->basereg==r||(p->q1.am->dreg&127)==r))
       return 1;
     if((p->q2.flags&REG)&&p->q2.reg==r)
       return 1;
-    if(p->q2.am&&(p->q2.am->basereg==r||p->q2.am->dreg==r))
+    if(p->q2.am&&(p->q2.am->basereg==r||(p->q2.am->dreg&127)==r))
       return 1;
-    if(p->z.am&&(p->z.am->basereg==r||p->z.am->dreg==r))
+    if(p->z.am&&(p->z.am->basereg==r||(p->z.am->dreg&127)==r))
       return 1;
     if((p->z.flags&REG)&&p->z.reg==r)
       return (p->z.flags&DREFOBJ)!=0;
@@ -3430,8 +3433,8 @@ void gen_var_head(FILE *f,struct Var *v)
   if(v->storage_class==STATIC){
     if(ISFUNC(v->vtyp->flags)) return;
     if(!special_section(f,v)){
-      if(v->clist&&(!constflag||CONSTINDATA||use_sd)&&section!=DATA){emit(f,dataname);if(f) section=DATA;}
-      if(v->clist&&constflag&&!CONSTINDATA&&!use_sd&&section!=CODE){emit(f,codename);if(f) section=CODE;}
+      if(v->clist&&(!constflag||CONSTINDATA/*||use_sd*/)&&section!=DATA){emit(f,dataname);if(f) section=DATA;}
+      if(v->clist&&constflag&&!CONSTINDATA/*&&!use_sd*/&&section!=CODE){emit(f,codename);if(f) section=CODE;}
       if(!v->clist&&section!=BSS){emit(f,bssname);if(f) section=BSS;}
     }
     if(GAS){
@@ -3450,8 +3453,8 @@ void gen_var_head(FILE *f,struct Var *v)
     }
     if(v->flags&(DEFINED|TENTATIVE)){
       if(!special_section(f,v)){
-	if(v->clist&&(!constflag||CONSTINDATA||use_sd)&&section!=DATA){emit(f,dataname);if(f) section=DATA;}
-	if(v->clist&&constflag&&!CONSTINDATA&&!use_sd&&section!=CODE){emit(f,codename);if(f) section=CODE;}
+	if(v->clist&&(!constflag||CONSTINDATA/*||use_sd*/)&&section!=DATA){emit(f,dataname);if(f) section=DATA;}
+	if(v->clist&&constflag&&!CONSTINDATA/*&&!use_sd*/&&section!=CODE){emit(f,codename);if(f) section=CODE;}
 	if(!v->clist&&section!=BSS){emit(f,bssname);if(f) section=BSS;}
       }
       if(GAS){
@@ -5098,7 +5101,11 @@ int emit_peephole(void)
        sscanf(asmline[0],"\tmove.l\t%c%d,%c%d\n%c",&c3,&r3,&c4,&r4,&e)==4&&
        c1==c4&&r1==r4&&c2==c3&&r2==r3&&r1>=0&&r1<=7&&r2>=0&&r2<=7&&
        (c1=='a'||c1=='d')&&(c2=='a'||c2=='d')){
-      remove_asm();
+      /* create tst instruction if condition codes of address register are needed */
+      if(c1=='d'&&c2=='a'&&cc_set!=0&&(cc_set->flags&(REG|DREFOBJ))==REG&&cc_set->reg==a0+r2)
+	sprintf(asmline[0],"\ttst.l\t%s\n",mregnames[d0+r1]);
+      else
+	remove_asm();
       savedemit++;
       return 1;
     }

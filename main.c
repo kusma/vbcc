@@ -1,4 +1,4 @@
-/*  $VER: vbcc (main.c) V0.8    */
+/*  $VER: vbcc (main.c) V0.9    */
 #include "vbcc_cpp.h"
 #include "vbc.h"
 #include "opt.h"
@@ -12,6 +12,27 @@ int line,errors;
 bvtype task_preempt_regs[RSIZE/sizeof(bvtype)];
 bvtype task_schedule_regs[RSIZE/sizeof(bvtype)];
 char *multname[]={"","s"};
+
+struct deplist {char *name; struct deplist *next;} *deps;
+FILE *depout;
+void handle_deps(char *name,int string)
+{
+  struct deplist *p=deps;
+  if(!depout||!name||!*name) return;
+  /* by default omit <...> includes */
+  if(!string&&!(c_flags[51]&USEDFLAG)) return;
+  while(p){
+    if(!strcmp(p->name,name)) return;
+    p=p->next;
+  }
+  p=mymalloc(sizeof(*p));
+  p->name=mymalloc(strlen(name)+1);
+  strcpy(p->name,name);
+  p->next=deps;
+  deps=p;
+  fprintf(depout," %s",name);
+}
+
 void raus(void)
 /*  Beendet das Programm                                            */
 {
@@ -387,7 +408,8 @@ static void do_clist_calls(struct const_list *cl)
     if(cl->tree&&(cl->tree->o.flags&VARADR)){
       struct Var *v=cl->tree->o.v;
       if(ISFUNC(v->vtyp->flags)){
-	printf(":: %s\n",v->identifier);
+	if(DEBUG&1)
+	  printf(":: %s\n",v->identifier);
 	do_function(v);
       }
     }
@@ -529,6 +551,7 @@ int main(int argc,char *argv[])
   if(c_flags[13]&USEDFLAG) ucpp_flags|=CPLUSPLUS_COMMENTS;
   if(c_flags[14]&USEDFLAG) ucpp_flags|=CPLUSPLUS_COMMENTS;
   if(c_flags[15]&USEDFLAG) ucpp_flags&=~HANDLE_TRIGRAPHS;
+  if(c_flags[52]&USEDFLAG) ucpp_flags&=~(WARN_STANDARD|WARN_ANNOYING);
   if(c_flags[16]&USEDFLAG) no_inline_peephole=1;
   if(c_flags[17]&USEDFLAG) final=1;
   if(!(c_flags[8]&USEDFLAG)) c_flags_val[8].l=10; /* max. Fehlerzahl */
@@ -681,6 +704,13 @@ int main(int argc,char *argv[])
       ungetc(first_byte,in);
       input_wpo=0;
     }
+    if(c_flags[50]&USEDFLAG){
+      char *p;
+      depout=open_out(inname,"dep");
+      /* nicht super schoen (besser letzten Punkt statt ersten), aber kurz.. */
+      for(p=inname;*p&&*p!='.';p++) fprintf(depout,"%c",*p);
+      fprintf(depout,".o: %s",inname);
+    }
     if(c_flags[18]&USEDFLAG) ppout=open_out(inname,"i");
     if(!input_wpo){
       int mcmerk=misracheck;
@@ -729,6 +759,7 @@ int main(int argc,char *argv[])
     translation_unit();
     fclose(in); /*FIXME: do I have to close??*/   
     if((c_flags[18]&USEDFLAG)&&ppout) fclose(ppout);
+    if((c_flags[50]&USEDFLAG)&&depout){fprintf(depout,"\n");fclose(depout);}
     if(!input_wpo)
       free_lexer_state(&ls);
   }
@@ -1499,18 +1530,24 @@ void do_pragma(char *s)
     /* packing of structures */
     s+=4;pragma_killsp();
     if(*s=='(') { s++;pragma_killsp();}
-    if(*s==')'||!strncmp("pop",s,3)){
-      if(pidx>0) pack_align=pack[--pidx];
-    }else{
-      int p=0;
-      sscanf(s,"%i",&p);
+    if(!strncmp("push",s,4)){
       if(pidx==PACKSTACKSIZE){
         memmove(pack,pack+1,(PACKSTACKSIZE-1)*sizeof(pack[0]));
         pidx--;
       }
       pack[pidx++]=pack_align;
-      pack_align=p;
-    }
+      s+=4;pragma_killsp();
+      if(*s==','){
+        s++;pragma_killsp();
+        sscanf(s,"%i",&pack_align);
+      }
+    }else if(!strncmp("pop",s,3)){
+      if(pidx>0) pack_align=pack[--pidx];
+      else pack_align=0;
+    }else if(*s==')')
+      pack_align=0;
+    else
+      sscanf(s,"%i",&pack_align);
 #if 0
   }else if(!strncmp("type",s,4)){
     /*  Typ eines Ausdrucks im Klartext ausgeben    */
@@ -1718,7 +1755,7 @@ static int pp_line;
 void do_error(int errn,va_list vl)
 /*  Behandelt Ausgaben wie Fehler und Meldungen */
 {
-    int type;
+  int type,have_stack=0;
     char *errstr="",*txt=filename;
     if(c_flags_val[8].l&&c_flags_val[8].l<=errors)
       return;
@@ -1737,6 +1774,8 @@ void do_error(int errn,va_list vl)
     }else if(type&(INFUNC|INIC)){
       if((type&INIC)&&err_ic&&err_ic->line){
 	fprintf(stderr,"%s %d in line %d of \"%s\": ",errstr,errn,err_ic->line,err_ic->file);
+
+
       }else{
 	fprintf(stderr,"%s %d in function \"%s\": ",errstr,errn,cur_func);
       }
@@ -1763,9 +1802,18 @@ void do_error(int errn,va_list vl)
 	  if(c==':'||c=='/'||c=='\\') txt=p;
       }
       fprintf(stderr,"%s %d in line %d of \"%s\": ",errstr,errn,n,txt);
+      have_stack=1; /* we can report the include stack */
     }
     vfprintf(stderr,err_out[errn].text,vl);
     fprintf(stderr,"\n");
+    if(have_stack&&(!(c_flags[49]&USEDFLAG))){
+      int i;
+      struct stack_context *sc = report_context();
+      for(i=0;;i++){
+	if(sc[i].line==-1) break;
+	fprintf(stderr,"\tincluded from file \"%s\":%ld\n",sc[i].long_name?sc[i].long_name:sc[i].name,sc[i].line);
+      }
+    }
     if(type&ERROR){
       errors++;
       if(c_flags_val[8].l&&c_flags_val[8].l<=errors&&!(type&NORAUS))
@@ -1777,8 +1825,6 @@ void error(int errn,...)
 {
   va_list vl;
   va_start(vl,errn);
-  if(errn==0)
-    printf("error=0\n");
   do_error(errn,vl);
   va_end(vl);
 }

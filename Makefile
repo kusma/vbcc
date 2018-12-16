@@ -39,7 +39,9 @@ bin/vprof$X: vprof/vprof.c
 	$(CC) vprof/vprof.c -o $@ $(LDFLAGS)
 
 doc/vbcc.pdf:
-	(cd doc; texi2dvi --pdf vbcc.texi)
+	(cd doc; texi2dvi --pdf vbcc.texi; \
+	rm -f vbcc.cp vbcc.fn vbcc.vr vbcc.tp vbcc.ky vbcc.pg vbcc.toc \
+	      vbcc.aux vbcc.log)
 
 doc/vbcc.html:
 	(cd doc;texi2html -split=chapter -nosec_nav -frames vbcc.texi)

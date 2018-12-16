@@ -1147,7 +1147,7 @@ struct Typ *direct_declarator(struct Typ *a)
           }else{
             eval_constn(tree);
             p->size=vmax;
-            if(zmeqto(p->size,l2zm(0L))) {error(61);p->size=l2zm(1L);}
+            if(zmleq(p->size,l2zm(0L))) {error(61);p->size=l2zm(1L);}
           }
         }
         free_expression(tree);
@@ -3628,7 +3628,7 @@ struct const_list *initialization(struct Typ *t,int noconst,int level,int desi,s
     if(level==0&&!bracket&&!c99) error(157);
     desi_follows=1;
     while(desi_follows){
-      cl=designator(t,0);
+      cl=designator(t,first);
 
       if(!cl){
 	cl=insert_cl(first,l2zm((long)0));

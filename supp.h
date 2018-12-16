@@ -720,6 +720,7 @@ extern void gen_var_head(FILE *,struct Var *);
 extern void gen_align(FILE *,zmax);
 extern int shortcut(int, int);
 extern int must_convert(int,int,int);
+long get_pof2(zumax);
 #ifdef HAVE_TARGET_PRAGMAS
 extern int handle_pragma(const char *);
 #endif

@@ -481,7 +481,7 @@ int type_expression2(np p,struct Typ *ttyp)
 /*  Die Berechnung von Konstanten und andere Vereinfachungen    */
 /*  sollten vielleicht in eigene Funktion kommen                */
 {
-  int ok,f=p->flags,mopt=dontopt;
+  int ok,f=p->flags,mopt=dontopt,ttf;
   struct Typ *shorttyp;
 #if HAVE_AOS4
   np thisp=0;
@@ -493,6 +493,7 @@ int type_expression2(np p,struct Typ *ttyp)
 /* removed */
 #endif
   if(!p){ierror(0);return(1);}
+  if(ttyp) ttf=ttyp->flags&NQ;
   /*    if(p->ntyp) printf("Warnung: ntyp!=0\n");*/
   p->lvalue=0;
   p->sidefx=0;
@@ -833,7 +834,7 @@ int type_expression2(np p,struct Typ *ttyp)
 /* removed */
 /* removed */
 #endif
-    if(ttyp&&shortcut(f,ttyp->flags&NU))
+    if(ttyp&&(ttf<=INT||ttf<(p->left->ntyp->flags&NQ)||ttf<(p->right->ntyp->flags&NQ))&&shortcut(f,ttyp->flags&NU))
       p->ntyp=clone_typ(ttyp);
     else
       p->ntyp=arith_typ(p->left->ntyp,p->right->ntyp);
@@ -1130,7 +1131,7 @@ int type_expression2(np p,struct Typ *ttyp)
       }
     }else{
       if(f==LSHIFT||f==RSHIFT){
-	if(ttyp&&shortcut(f,ttyp->flags&NU)){
+	if(ttyp&&(ttf<=INT||ttf<(p->left->ntyp->flags&NQ))&&shortcut(f,ttyp->flags&NU)){
 	  p->ntyp=clone_typ(ttyp);
 	}else{
 	  p->ntyp=arith_typ(p->left->ntyp,p->left->ntyp);
@@ -1149,7 +1150,7 @@ int type_expression2(np p,struct Typ *ttyp)
 #endif
       }else{
 	/* ggfs. in kleinerem Zieltyp auswerten - bei float keinen shortcut (wäre evtl. double=>float unkritisch?) */
-	if(ttyp&&!ISFLOAT(ttyp->flags)&&!ISFLOAT(p->left->ntyp->flags)&&!ISFLOAT(p->right->ntyp->flags)&&shortcut(f==PMULT?MULT:f,ttyp->flags&NU))
+	if(ttyp&&(ttf<=INT||ttf<(p->left->ntyp->flags&NQ)||ttf<(p->right->ntyp->flags&NQ))&&!ISFLOAT(ttf)&&!ISFLOAT(p->left->ntyp->flags)&&!ISFLOAT(p->right->ntyp->flags)&&shortcut(f==PMULT?MULT:f,ttyp->flags&NU))
 	  p->ntyp=clone_typ(ttyp);
 	else
 	  p->ntyp=arith_typ(p->left->ntyp,p->right->ntyp);
@@ -2131,6 +2132,7 @@ int alg_opt(np p,struct Typ *ttyp)
 	    dontopt=0;
             return type_expression2(p,ttyp);
         }
+
     }
     if(c==1){
         /*  0-a=-a  */
@@ -2182,6 +2184,29 @@ int test_assignment(struct Typ *zt,np q)
 /* removed */
 #endif
       error(166);
+    }
+    if(q->flags==CEXPR){
+      zmax ms,ns;zumax mu,nu;
+      eval_constn(q);
+      ms=vmax;mu=vumax;
+      insert_const(&gval,zt->flags&~UNSIGNED);
+      eval_const(&gval,zt->flags&~UNSIGNED);
+      ns=vmax;
+      eval_constn(q);
+      insert_const(&gval,zt->flags|UNSIGNED);
+      eval_const(&gval,zt->flags|UNSIGNED);
+      nu=vumax;
+      if(!zumeqto(nu,mu)&&!zmeqto(ns,ms)) 
+	error(363);
+      else{
+	if(zt->flags&UNSIGNED){
+	  if(!zumeqto(nu,mu))
+	    error(362);
+	}else{
+	  if(!zmeqto(ns,ms))
+	    error(362);
+	}
+      }
     }
     return 1;
   }

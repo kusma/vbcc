@@ -220,11 +220,18 @@ or additional options.
                 Turn on warning number n; turn on all warnings if n<0.
                 @xref{Errors and Warnings}
 
+    @item -no-cpp-warn
+                Turn off all preprocessor warnings.
+
     @item -strip-path
                 Strip the path of filenames from error messages.
                 Error messages may look more convenient that
                 way, but message browsers or
                 similar programs might need full paths.
+
+    @item -no-include-stack
+                Do not display the include stack in error messages.
+
 
     @item -+
     @itemx -cpp-comments
@@ -235,6 +242,14 @@ or additional options.
 
     @item -E
                 Write the preprocessor output to <file>.i.
+
+    @item -deps
+                Write a make-style dependency-line to <file>.dep.
+
+    @item -deps-for-libs
+                By default, @code{-deps} will not include files that are
+                included using the syntax @code{#include <...>}. Specify this option
+                to add those files as well.
 
     @item -reserve-reg=<register>
                 Reserve that register not to be used by the backend.
@@ -1527,6 +1542,22 @@ using @option{-iso} or @option{-ansi}.
         The counterpart to @code{#pragma begin_header}. Marks the end
         of a system-header. Not for use in applications!
 
+      @item #pragma pack(n)
+        Set alignment of structure members to a multiple of @code{n} bytes.
+
+      @item #pragma pack()
+        Restores structure alignment to the target's default alignment,
+        which was in effect when the compilation started.
+
+      @item #pragma pack(push[,n])
+        Pushes the current structure alignment onto an internal stack and
+        optionally sets a new alignment to a multiple of @code{n} bytes.
+
+      @item #pragma pack(pop)
+        Restores the topmost structure alignment, saved by @code{pack(push)},
+        from an internal stack. Restores the default alignment, when the
+        stack is empty.
+
 @end table
 
 
@@ -1827,7 +1858,10 @@ The following macros are defined by the compiler.
     @item Joerg Plate
     @item Gilles Pirio
     @item Bartlomiej Pater
+    @item Elena Novaretti
     @item Gunther Nikl
+    @item Constantinos Nicolakakis
+    @item Timm S. Mueller
     @item Robert Claus Mueller
     @item Joern Maass
     @item Aki M Laukkanen
@@ -1837,6 +1871,7 @@ The following macros are defined by the compiler.
     @item Julian Kinraid
     @item Acereda Macia Jorge
     @item Dirk Holtwick
+    @item Matthew Hey
     @item Tim Hanson
     @item Kasper Graversen
     @item Jens Granseuer
