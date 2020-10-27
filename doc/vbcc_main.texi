@@ -1800,7 +1800,15 @@ a constructor with a priority of 1 is executed first while a destructor
 with a priority of 1 is executed last. @code{<name>} is an optional name,
 used to differentiate functions of the same level.
 
-@subsubsection Predefined macros
+@subsection @code{__noinline}
+
+@code{__noinline} will prevent inlining of a given function. The heuristic
+used for deciding whether a function should be inlined generally makes a good
+trade-off between code size and performance, but sometimes it can be useful to override
+this behaviour. Use-cases include keeping "cold" functions out-of line to reduce code
+size, or to allow safe use of inline assembly with labels.
+
+@subsection Predefined macros
 The following macros are defined by the compiler.
 @example
   #define __VBCC__
@@ -1815,6 +1823,7 @@ The following macros are defined by the compiler.
   #define __nosidefx __vattr("nosidefx()")
   #define __stack(x) __vattr(__str(stack1(x)))
   #define __stack2(x) __vattr(__str(stack2(x)))
+  #define __noinline __vattr("noinline()")
   #define __STDC_VERSION__ 199901L
 @end example
 @code{__STDC_VERSION__} is defined in C99-mode only.
@@ -1877,6 +1886,7 @@ The following macros are defined by the compiler.
     @item Jens Granseuer
     @item Volker Graf
     @item Marcus Geelnard
+    @item Franta Fulin
     @item Matthias Fleischer
     @item Alexander Fichtner
     @item Olivier Fabre

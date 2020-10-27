@@ -87,6 +87,23 @@ this code that are retained.
 @end example
 
 
+@section Global Variables
+
+@subsection timezone
+
+On some host operating systems vclib might be unable to determine the
+current time zone, which is required for functions like
+@code{mktime()} or @code{localtime()} to work. Here you can overwrite
+the following variables:
+
+@table @code
+@item long __gmtoffset
+  Offset in minutes, west of Greenwich Mean Time (GMT).
+@item int __dstflag
+  Set to non-zero, when Daylight Saving Time is active.
+@end table
+
+
 @section Embedded Systems
 
 This section describes specifics of the C library for embedded systems.
@@ -390,13 +407,10 @@ obtain the time used by the calling process.
 
 If you want to write programs that use only Amiga functions and none from
 vc.lib you can use @file{minstart.o} instead of @file{startup.o} and
-produce smaller executables.
- 
-This is only useful for people who know enough about the Amiga shared
-libraries, the stubs in amiga.lib etc. If you do not know enough about
-those things better forget minstart at all.
- 
-This startup code does not set up all the things needed by vc.lib, so you
+produce smaller executables. You can also achieve that by simply using
+the @file{aos68km} config file instead.
+
+This startup code does not set up everything needed by vc.lib, so you
 must not use most of those functions (string and ctype funtions are ok,
 but most other functions - especially I/O and memory handling - must not
 be used).
@@ -444,8 +458,9 @@ AmigaOS can keep special "pure" programs resident in RAM, and restart them
 from there without having to load them again from disk. To make it easy to
 create such reentrant programs, even with static data, you can link with the
 special startup code @file{minres.o}, which is a minimal startup code for
-resident programs. Everything mentioned for @file{minstart.o} in the previous
-section is also valid for @file{minres.o}.
+resident programs. Or simply use the config file @file{aos68kr} instead.
+Everything mentioned for @file{minstart.o} in the previous section is also
+valid for @file{minres.o}.
 
 To create real resident programs you have to follow the following rules:
 @itemize @minus
@@ -475,7 +490,7 @@ int const *p = &x;
 @node amigalib
 @subsection amiga.lib
 
-To write programs accessing AmigaOS (rather than standard C functions
+To write programs using AmigaOS (rather than standard C functions
 only), a replacement for the original (copyrighted) @file{amiga.lib}
 is provided with @command{vbcc}. This replacement is adapted to vbcc,
 does not cause collisions with some functions (e.g. @code{sprintf})
@@ -502,7 +517,7 @@ Specify @option{-lamiga} to link with @file{amiga.lib}.
     the @option{-lauto} or @option{-lautos} option to @command{vc}.
  
     When you are calling a standard Amiga library function and do not
-    have defined the corresponding library base then the library base
+    have defined the corresponding library base, then the library base
     as well as code to open/close it will be taken from @file{auto.lib}.
  
     By default, @file{auto.lib} will try to open any library version. If you
@@ -514,44 +529,63 @@ Specify @option{-lamiga} to link with @file{amiga.lib}.
 @end example
 
     Note that your program will abort before reaching @code{main()} if one
-    of the libraries cannot be opened. Also note that the dos.library
-    will be openened by the standard startup code, not by auto.lib.
-    This means you have to open dos.library yourself, when linking
-    with @file{minstart.o}. 
+    of the libraries cannot be opened. Also note that the @file{dos.library}
+    will be openened by the standard startup code, not by @file{auto.lib}.
+    This means you have to open @file{dos.library} yourself, when linking
+    with @file{minstart.o}.
 
 
 @section Kickstart1.x/68k
 
 This section describes specifics of the C library for Amiga Kickstart 1.2
 and 1.3 provided by the target @file{m68k-kick13}.
-The relevant files are @file{startup.o}, @file{minstart.o}, @file{minres.o}
+The relevant files are @file{startup.o}, @file{minstart.o}, @file{minres.o},
+@file{startup16.o}, @file{minstart16.o}, @file{minres16.o},
 @file{vc.lib}, @file{vcs.lib}, @file{m13.lib}, @file{m13s.lib},
 @file{m881.lib}, @file{m881s.lib},
-@file{amiga.lib}, @file{amigas.lib}, @file{auto.lib} and @file{autos.lib}.
+@file{amiga.lib}, @file{amigas.lib}, @file{auto.lib} and @file{autos.lib},
+@file{vc16.lib}, @file{vc16s.lib}, @file{m1316.lib}, @file{m1316s.lib},
+@file{m88116.lib}, @file{m88116s.lib},
+@file{amiga16.lib}, @file{amiga16s.lib}, @file{auto16.lib} and
+@file{auto16s.lib}.
 
 It makes it possible to develop programs targeted for these older versions
 of the Amiga operating system, using the original Commodore Kickstart 1.3
-header files.
+header files. Note that there are also libraries and config files for
+using a 16-bit int ABI, which was common at that time and may have some
+advantages on 16-bit CPUs, like the 68000 or 68010.
 
 The following config files are available:
 @table @code
 @item kick13
   Standard startup code (@file{startup.o}) with command line parsing
-  and optional Workbench startup (@xref{Startup13}).
+  and optional Workbench startup (@xref{Startup13}) using 32-bit int.
 @item kick13m
   Minimal startup code (@file{minstart.o}) without command line
-  parsing. You have to open all libraries yourself (@xref{Minimal Startup}).
+  parsing. You have to open all libraries yourself (@xref{Minimal Startup})
+  using 32-bit int.
 @item kick13r
   Minimal startup code (@file{minres.o}) for resident programs.
   Always compiles in small data mode and links with @file{vcs.lib}
-  (@xref{Minimal Resident}).
+  (@xref{Minimal Resident}) using 32-bit int.
+@item kick13s
+  Standard startup code (@file{startup.o}) with command line parsing
+  and optional Workbench startup (@xref{Startup13}) using 16-bit int.
+@item kick13sm
+  Minimal startup code (@file{minstart.o}) without command line
+  parsing. You have to open all libraries yourself (@xref{Minimal Startup})
+  using 16-bit int.
+@item kick13sr
+  Minimal startup code (@file{minres.o}) for resident programs.
+  Always compiles in small data mode and links with @file{vcs.lib}
+  (@xref{Minimal Resident}) using 16-bit int.
 @end table
 
 @node Startup13
 @subsection Startup
 
     The startup code currently consists of a slightly modified standard
-    Amiga 1.3 startup (@file{startup.o}). The startup code sets up some
+    AmigaOS 1.3 startup (@file{startup.o}). The startup code sets up some
     global variables and initializes stdin, stdout and stderr.
     The exit code closes all open files and frees all memory.
     If you link with a math library the startup/exit code will be taken

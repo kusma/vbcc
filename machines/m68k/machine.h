@@ -1,14 +1,15 @@
+/*  $VER: vbcc (m68k/machine.h) $Revision: 1.9 $     */
 
 #include "dt.h"
 
 /*  This struct can be used to implement machine-specific           */
 /*  addressing-modes.                                               */
-struct AddressingMode{
+typedef struct AddressingMode{
     int basereg;
     long dist;
     int skal;
     int dreg;
-};
+} AddressingMode;
 
 /*  The number of registers of the target machine.                  */
 #define MAXR 28
@@ -25,6 +26,11 @@ struct AddressingMode{
 /*  This specifies the smallest integer type that can be added to a */
 /*  pointer.                                                        */
 extern int MINADDI2P;
+
+/*  This specifies the smallest unsigned type that can be added to a */
+/*  pointer.                                                        */
+#define MINADDUI2P (UNSIGNED|INT)
+
 
 /*  This specifies the biggest integer type that can be added to a  */
 /*  pointer.                                                        */
@@ -98,3 +104,9 @@ struct reg_handle {
 
 /* We use builtin libcalls for some operations */
 #define HAVE_LIBCALLS 1
+
+/* We have target-specific pragmas */
+#define HAVE_TARGET_PRAGMAS
+
+/* We have a target-specific add_var hook */
+#define HAVE_TARGET_VARHOOK

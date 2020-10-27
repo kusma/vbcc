@@ -700,7 +700,9 @@ found_file:
 		nff->name = sdup(name);
 		nff->long_name = s ? s : sdup(name);
 		nff->incdir = incdir;
+#if 0
 		putHT(lf ? found_files_loc : found_files, nff);
+#endif
 		s = 0;
 		find_file_error = FF_UNKNOWN;
 		ff = nff;

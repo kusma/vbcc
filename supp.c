@@ -1,3 +1,5 @@
+/*  $VER: vbcc (supp.c) $Revision: 1.32 $     */
+
 #include "supp.h"
 #include "opt.h"
 
@@ -51,7 +53,7 @@ int DEBUG;
 int label;
 
 int regs[MAXR+1],regused[MAXR+1],simple_scratch[MAXR+1];
-struct Var *regsv[MAXR+1];
+Var *regsv[MAXR+1];
 int goto_used;
 int ic_count;
 zmax max_offset;
@@ -62,8 +64,8 @@ int disable;
 int multiple_ccs;
 int lastlabel,return_label;
 int only_inline;
-struct IC *err_ic;
-long maxoptpasses=10;
+IC *err_ic;
+long maxoptpasses=30;
 long optflags;
 int optsize,optspeed,unroll_all,stack_check;
 int cross_module,final,no_emit;
@@ -73,11 +75,11 @@ long inline_depth=1;
 long unroll_size=200;
 int fp_assoc,noaliasopt,noitra;
 char *filename;
-struct IC *first_ic,*last_ic;
+IC *first_ic,*last_ic;
 int float_used;
 bvtype regs_modified[RSIZE/sizeof(bvtype)];
 /*  Das haette ich gern woanders    */
-struct Var *vl0,*vl1,*vl2,*vl3;
+Var *vl0,*vl1,*vl2,*vl3;
 int align_arguments=1;
 zmax stackalign;
 int misracheck,misraversion,misracomma,misratok;
@@ -90,10 +92,10 @@ char *emit_p;
 int emit_f,emit_l;
 int no_inline_peephole;
 
-struct Typ *new_typ(void)
+type *new_typ(void)
 /*  Erzeigt neuen (leeren) Typ.  */
 {
-  struct Typ *new=mymalloc(TYPS);
+  type *new=mymalloc(TYPS);
   new->flags=0;
   new->next=0;
   new->exact=0;
@@ -106,10 +108,10 @@ struct Typ *new_typ(void)
   return new;
 }
 
-struct Typ *clone_typ(struct Typ *old)
+type *clone_typ(type *old)
 /*  Erzeugt Kopie eines Typs und liefert Zeiger auf Kopie.  */
 {
-  struct Typ *new;
+  type *new;
   if(!old) return 0;
   new=new_typ();
   *new=*old;
@@ -120,9 +122,9 @@ struct Typ *clone_typ(struct Typ *old)
   if(new->next) new->next=clone_typ(new->next);
   return new;
 }
-struct Var *new_var(void)
+Var *new_var(void)
 {
-  struct Var *new=mymalloc(sizeof(*new));
+  Var *new=mymalloc(sizeof(*new));
   new->clist=0;
   new->vtyp=0;
   new->storage_class=0;
@@ -150,9 +152,9 @@ struct Var *new_var(void)
   return new;
 }  
 
-struct IC *new_IC(void)
+IC *new_IC(void)
 {
-  struct IC *p=mymalloc(ICS);
+  IC *p=mymalloc(ICS);
   p->change_cnt=0;
   p->use_cnt=0;
   p->call_cnt=0;
@@ -179,9 +181,9 @@ struct IC *new_IC(void)
   return p;
 }
 /* (partially) clones an IC list */
-struct IC *clone_ic(struct IC *p)
+IC *clone_ic(IC *p)
 {
-  struct IC *new,*first,*last;
+  IC *new,*first,*last;
   first=last=new=0;
   while(p){
     new=mymalloc(sizeof(*new));
@@ -203,10 +205,10 @@ struct IC *clone_ic(struct IC *p)
   }
   return first;
 }    
-void free_IC(struct IC *p)
+void free_IC(IC *p)
 /*  Gibt IC-Liste inkl. Typen frei.                 */
 {
-  struct IC *merk;
+  IC *merk;
   if(DEBUG&1) printf("free_IC()\n");
   while(p){
     /*if(p->q1.am&&!p->q1.flags) ierror(0);
@@ -222,7 +224,7 @@ void free_IC(struct IC *p)
     p=merk;
   }
 }
-void move_IC(struct IC *after,struct IC *p)
+void move_IC(IC *after,IC *p)
 {
   if(p->prev)
     p->prev->next=p->next;
@@ -234,7 +236,7 @@ void move_IC(struct IC *after,struct IC *p)
     last_ic=p->prev;
   insert_IC(after,p);
 }
-void remove_IC(struct IC *p)
+void remove_IC(IC *p)
 /*  Entfernt IC p aus Liste. */
 {
   if(p->prev) p->prev->next=p->next; else first_ic=p->next;
@@ -244,10 +246,10 @@ void remove_IC(struct IC *p)
   if(p->z.am) free(p->z.am);
   free(p);
 }
-void freetyp(struct Typ *p)
+void freetyp(type *p)
 /* Gibt eine Typ-Liste frei, aber keine struct_declaration oder so. */
 {
-  int f;struct Typ *merk;
+  int f;type *merk;
   if(DEBUG&8){printf("freetyp: ");prd(stdout,p);printf("\n");}
   while(p){
     merk=p->next;
@@ -261,7 +263,7 @@ void freetyp(struct Typ *p)
 }
 
 #ifndef HAVE_TGT_FALIGN
-zmax falign(struct Typ *t)
+zmax falign(type *t)
 /*  Liefert Alignment eines Typs. Funktioniert im Gegensatz zum  */
 /*  align[]-Array auch mit zusammengesetzten Typen.              */
 {
@@ -290,7 +292,7 @@ zmax falign(struct Typ *t)
 #endif
 
 /* check, whether t is a variable length array */
-int is_vlength(struct Typ *t)
+int is_vlength(type *t)
 {
   if(!ISARRAY(t->flags))
     return 0;
@@ -301,9 +303,9 @@ int is_vlength(struct Typ *t)
 }
 
 /* calculate size of a variable length array */
-struct Var *vlength_szof(struct Typ *t)
+Var *vlength_szof(type *t)
 {
-  struct IC *new;struct Typ *nt;
+  IC *new;type *nt;
   if(!ISARRAY(t->flags))
     ierror(0);
   new=new_IC();
@@ -388,7 +390,7 @@ int VECTYPE(int x)
 
 
 #ifndef HAVE_TGT_SZOF
-zmax szof(struct Typ *t)
+zmax szof(type *t)
 /*  Liefert die benoetigte Groesse eines Typs in Bytes.     */
 {
   int i=t->flags&NQ,j;zmax size,m;
@@ -430,7 +432,7 @@ zmax szof(struct Typ *t)
 /* removed */
 #endif
     for(j=0;j<t->exact->count;j++){
-      struct Typ *h=(*t->exact->sl)[j].styp;
+      type *h=(*t->exact->sl)[j].styp;
       if((*t->exact->sl)[j].bfoffset<=0){
         m=(*t->exact->sl)[j].align;
 #ifdef HAVE_ECPP
@@ -448,7 +450,7 @@ zmax szof(struct Typ *t)
   }
   return sizetab[i];
 }
-zmax struct_offset(struct struct_declaration *sd,const char *identifier)
+zmax struct_offset(struct_declaration *sd,const char *identifier)
 {
   int i=0,intbitfield=-1;zmax offset=l2zm(0),al;
   while(i<sd->count&&strcmp((*sd->sl)[i].identifier,identifier)){
@@ -551,7 +553,7 @@ void emitval(FILE *f,union atyps *p,int t)
 }
 #endif
 
-void pric2(FILE *f,struct IC *p)
+void pric2(FILE *f,IC *p)
 /*  Gibt ein IC aus.  */
 {
   if(p->code>NOP) ierror(0);
@@ -615,7 +617,7 @@ fprintf(f,"%p!\n",p->arg_list[i]);
   }
 #endif
 }
-void pric(FILE *f,struct IC *p)
+void pric(FILE *f,IC *p)
 /*  Gibt IC-Liste auf dem Bildschirm aus.             */
 {
   while(p){
@@ -701,12 +703,13 @@ void emitzld(FILE *f,zldouble x)
   emit(f,"fp-constant");
 }
 
-static struct memblock {struct memblock *next;void *p;} *first_mb;
+typedef struct memblock {struct memblock *next;void *p;} memblock;
+static memblock *first_mb;
 
 static void add_mb(void *p)
 {
-  struct memblock *mb_second=first_mb;
-  struct memblock *mb=malloc(sizeof(*mb));
+  memblock *mb_second=first_mb;
+  memblock *mb=malloc(sizeof(*mb));
   if(!mb){
     error(12);
     raus();
@@ -718,8 +721,8 @@ static void add_mb(void *p)
 
 static void remove_mb(void *p)
 {
-  struct memblock *mb_prev=0;
-  struct memblock *mb=first_mb;
+  memblock *mb_prev=0;
+  memblock *mb=first_mb;
   while(mb){
     if(mb->p==p){
       if(mb_prev==0) first_mb=mb->next;
@@ -822,7 +825,7 @@ char *mystrdup(char *p)
 }
 
 /* Testet, ob zwei objs dieselben Register belegen. */
-int collides(struct obj *x,struct obj *y)
+int collides(obj *x,obj *y)
 {
     int x1,x2,y1,y2;
     if(!(x->flags&REG)||!(y->flags&REG)) return 0;
@@ -844,10 +847,10 @@ int collides(struct obj *x,struct obj *y)
 
 /* Versucht, ein IC so zu drehen, dass q2 und z kein gemeinsames */
 /* Register belegen. Liefert Null, wenn das nicht moeglich ist.  */
-int switch_IC(struct IC *p)
+int switch_IC(IC *p)
 {
     int c;
-    struct obj o;
+    obj o;
     if(!collides(&p->q2,&p->z)) return 1;
     c=p->code;
     if((c<OR||c>AND)&&c!=ADD&&c!=MULT&&c!=ADDI2P) return 0;
@@ -857,7 +860,7 @@ int switch_IC(struct IC *p)
     return 1;
 }
 
-void probj(FILE *f,struct obj *p,int t)
+void probj(FILE *f,obj *p,int t)
 /*  Gibt Objekt auf Bildschirm aus.                    */
 {
   if(p->am){ fprintf(f,"[tgt-addressing-mode]");return;}
@@ -900,7 +903,7 @@ void probj(FILE *f,struct obj *p,int t)
   if(p->flags&SCRATCH) fprintf(f,"[S]");
   if(p->flags&DREFOBJ) fprintf(f,")");
 }
-void prl(FILE *o,struct struct_declaration *p)
+void prl(FILE *o,struct_declaration *p)
 /* Gibt eine struct_declaration auf dem Bildschirm aus. */
 {
   int i;
@@ -934,7 +937,7 @@ void prl(FILE *o,struct struct_declaration *p)
   }
   recurse=merk_recurse;
 }
-void prd(FILE *o,struct Typ *p)
+void prd(FILE *o,type *p)
 /* Gibt einen Typ auf dem Bildschirm aus.    */
 {
   int f;
@@ -964,7 +967,7 @@ void prd(FILE *o,struct Typ *p)
 
   fprintf(o,"%s",typname[f&NQ]);
 }
-void print_var(FILE *o,struct Var *p)
+void print_var(FILE *o,Var *p)
 /* Gibt eine Variable aus. */
 {
   if(p->identifier&&*p->identifier){
@@ -974,7 +977,7 @@ void print_var(FILE *o,struct Var *p)
 }
 
 /* returns the first base Type in an compound type */
-int get_first_base_type(struct Typ *t) 
+int get_first_base_type(type *t) 
 {
   if (!t) return 0;
   if (ISARRAY(t->flags)) {
@@ -1063,10 +1066,10 @@ void eval_const(union atyps *p,int t)
 }
 #endif
 
-struct function_info *new_fi(void)
+function_info *new_fi(void)
 /*  Belegt neue function_info-Struktur und initialisiert sie.  */
 {
-  struct function_info *new;
+  function_info *new;
   new=mymalloc(sizeof(*new));
   new->first_ic=new->last_ic=new->opt_ic=0;
   new->vars=0;
@@ -1086,7 +1089,7 @@ struct function_info *new_fi(void)
   new->stack2=ul2zum(0UL);
   return new;
 }
-void free_fi(struct function_info *p)
+void free_fi(function_info *p)
 /*  Gibt ein function_info mit Inhalt frei.                     */
 {
   if(p->first_ic) free_IC(p->first_ic);
@@ -1100,13 +1103,13 @@ void free_fi(struct function_info *p)
   free(p);
 }
 
-void print_fi(FILE *f,struct function_info *p)
+void print_fi(FILE *f,function_info *p)
 /*  Gibt function_info aus. */
 {
   int i;
   fprintf(f,"function_info:\n");
   if(p->first_ic){
-    struct IC *ic=p->first_ic;
+    IC *ic=p->first_ic;
     fprintf(f," inline_code:\n");
     pric2(f,ic);
     while(ic!=p->last_ic){
@@ -1142,7 +1145,7 @@ void print_fi(FILE *f,struct function_info *p)
     fprintf(f," no side effects\n");
 }
 
-void print_varlist(FILE *f,struct varlist *p,int n)
+void print_varlist(FILE *f,varlist *p,int n)
 {
   int i;
   char *s;
@@ -1152,7 +1155,7 @@ void print_varlist(FILE *f,struct varlist *p,int n)
   }
 }
 
-int is_const(struct Typ *t)
+int is_const(type *t)
 /*  tested, ob ein Typ konstant (und damit evtl. in der Code-Section) ist   */
 {
   if(!(t->flags&(CONST|STRINGCONST))){
@@ -1165,7 +1168,7 @@ int is_const(struct Typ *t)
 }
 
 /* is object volatile? */
-int is_volatile_obj(struct obj *o)
+int is_volatile_obj(obj *o)
 {
   if(o->flags&DREFOBJ){
     if(o->dtyp&VOLATILE)
@@ -1180,7 +1183,7 @@ int is_volatile_obj(struct obj *o)
 }
 
 /* is IC volatile? */
-int is_volatile_ic(struct IC *p)
+int is_volatile_ic(IC *p)
 {
   if(p->q1.flags){
     if(is_volatile_obj(&p->q1)||(q1typ(p)&VOLATILE)) return 1;
@@ -1270,10 +1273,10 @@ void emit_char(FILE *f,int c)
 
 /* detect whether the following code resembles a switch-case-statement */
 /* will return the longest sequence which has at least min_density */
-struct case_table *calc_case_table(struct IC *p,double min_density)
+case_table *calc_case_table(IC *p,double min_density)
 {
-  static struct case_table ct;
-  struct obj *o,*ccr;
+  static case_table ct;
+  obj *o,*ccr;
   static union atyps *vals;
   union atyps min,max;
   zumax diff;
@@ -1352,7 +1355,7 @@ struct case_table *calc_case_table(struct IC *p,double min_density)
 }
 
 /* emit a list of jump-table entries */
-void emit_jump_table(FILE *f,struct case_table *ct,char *da,char *labprefix,int defl)
+void emit_jump_table(FILE *f,case_table *ct,char *da,char *labprefix,int defl)
 {
   unsigned long l,e;
   int i;
@@ -1381,7 +1384,7 @@ void emit_jump_table(FILE *f,struct case_table *ct,char *da,char *labprefix,int 
   }
 }
 /* display warnings if specified stack-size cannot be guaranteed */
-void static_stack_check(struct Var *v)
+void static_stack_check(Var *v)
 {
   /*FIXME*/
 }
@@ -1390,11 +1393,11 @@ void static_stack_check(struct Var *v)
 /* return the offset of the first variable-argument-macro to the
    beginning of the argument-area (i.e. the space occupied by
    normal arguments on the stack */
-zmax va_offset(struct Var *v)
+zmax va_offset(Var *v)
 {
   int i;
   zmax offset=l2zm(0L);
-  struct reg_handle rh=empty_reg_handle;
+  treg_handle rh=empty_reg_handle;
   for(i=0;i<v->vtyp->exact->count;i++){
 #if 0
     if((*v->vtyp->exact->sl)[i].reg!=0)
@@ -1453,7 +1456,7 @@ void vqsort (void *base,size_t nmemb,size_t size,int (*compar)(const void *,cons
 
 /* calculates registers used by this call IC
    returns 0 if not possible */
-int calc_regs(struct IC *p,int showwarnings)
+int calc_regs(IC *p,int showwarnings)
 {
   int i;
   if(p->call_cnt){
@@ -1507,7 +1510,7 @@ int bflayout(int bfoffset,int bfsize,int t)
 long get_pof2(zumax x)
 /*  Yields log2(x)+1 oder 0. */
 {
-  zumax p;int ln=1,max=(int)zm2l(zmmult(sizetab[MAXINT],char_bit));
+  zumax p;int ln=1,max=(int)zm2l(zmmult(sizetab[LLONG],char_bit));
   p=ul2zum(1L);
   while(ln<=max&&zumleq(p,x)){
     if(zumeqto(x,p)) return ln;
@@ -1515,6 +1518,84 @@ long get_pof2(zumax x)
   }
   return 0;
 }
+
+/* check if type is a varargs function */
+int is_varargs(type *t)
+{
+  int c;
+  if(t->exact&&(c=t->exact->count)!=0&&(*t->exact->sl)[c-1].styp->flags!=VOID)
+    return 1;
+  else
+    return 0;
+}
+
+/* add string to type- oder variable-aatribute */
+void add_attr(char **attr,char *new)
+{
+  int ln=strlen(new),lo;
+  if(*attr){
+    lo=strlen(*attr);
+    *attr=myrealloc(*attr,lo+ln+2);
+  }else{
+    lo=0;
+    *attr=mymalloc(ln+2);
+  }
+  (*attr)[lo]=';';
+  strcpy(*attr+lo+1,new);
+}
+
+
+hashtable *new_hashtable(size_t size)
+{
+  hashtable *new = mymalloc(sizeof(*new));
+
+  new->size = size;
+  new->collisions = 0;
+  new->entries = mymalloc(size*sizeof(*new->entries));
+  memset(new->entries,0,size*sizeof(*new->entries));
+  return new;
+}
+
+size_t hashcode(char *name)
+{
+  size_t h = 5381;
+  int c;
+
+  while (c = (unsigned char)*name++)
+    h = ((h << 5) + h) + c;
+  return h;
+}
+
+/* add to hashtable; name must be unique */
+void add_hashentry(hashtable *ht,char *name,hashdata data)
+{
+  size_t i=(hashcode(name)%ht->size);
+  hashentry *new=mymalloc(sizeof(*new));
+  new->name=name;
+  new->data=data;
+  if(DEBUG&1){
+    if(ht->entries[i])
+      ht->collisions++;
+  }
+  new->next=ht->entries[i];
+  ht->entries[i]=new;
+}
+
+/* finds unique entry in hashtable */
+hashdata find_name(hashtable *ht,char *name)
+{
+  size_t i=hashcode(name)%ht->size;
+  hashentry *p;
+  for(p=ht->entries[i];p;p=p->next){
+    if(!strcmp(name,p->name)){
+      return p->data;
+    }else
+      ht->collisions++;
+  }
+  return 0;
+}
+
+
 
 #ifdef HAVE_MISRA
 /* removed */

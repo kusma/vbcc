@@ -6,5 +6,7 @@
 
 #define M68K_16BIT_INT
 
+#define PTRDIFF_T(x) LONG
+
 #include "dt.h"
 #include "../m68k/machine.h"

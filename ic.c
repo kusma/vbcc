@@ -1,18 +1,18 @@
-/*  $VER: vbcc (ic.c) V0.8  */
+/*  $VER: vbcc (ic.c) $Revision: 1.41 $  */
 
 #include "vbc.h"
 #include "opt.h"
 
 static char FILE_[]=__FILE__;
 
-static struct IC *first_pushed;
+static IC *first_pushed;
 static unsigned int opushed;
 static int volatile_convert;
 
-int do_arith(np,struct IC *,np,struct obj *);
-np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2);
+int do_arith(np,IC *,np,obj *);
+np gen_libcall(char *fname,np arg1,type *t1,np arg2,type *t2);
 
-static void handle_reglist(struct regargs_list *,struct obj *);
+static void handle_reglist(regargs_list *,obj *);
 
 
 #if HAVE_LIBCALLS
@@ -29,11 +29,11 @@ static char *use_libcall_wrap(int c,int t,int t2)
 }
 #endif
 
-void gen_test(struct obj *o,int t,int branch,int label)
+void gen_test(obj *o,int t,int branch,int label)
 /*  Generiert ein test o, branch label und passt auf, dass      */
 /*  kein TEST const generiert wird.                             */
 {
-  struct IC *new;
+  IC *new;
   if(o->flags&KONST){
     eval_const(&o->val,t);
     if(zldeqto(vldouble,d2zld(0.0))&&zmeqto(vmax,l2zm(0L))&&zumeqto(vumax,ul2zum(0UL))){
@@ -43,8 +43,8 @@ void gen_test(struct obj *o,int t,int branch,int label)
     }
   }else{
 #if HAVE_LIBCALLS
-    static struct node n={TEST},nn={REINTERPRET};
-    static struct Typ nt,it={INT};
+    static node n={TEST},nn={REINTERPRET};
+    static type nt,it={INT};
     char *libname;
     n.left=&nn;
     n.ntyp=&it;
@@ -81,12 +81,12 @@ void gen_test(struct obj *o,int t,int branch,int label)
 /* remove a freereg if a scratch register is needed more than once */
 static void keep_reg(int r)
 {
-  struct IC *n;
+  IC *n;
   if(nocode) return;
   n=last_ic;
   while(n){
     if(n->code==CALL&&regscratch[r]){
-      struct IC *ret;
+      IC *ret;
       regs[r]=1;
       savescratch(MOVEFROMREG,n->prev,0,&n->q1);
       ret=n->next;
@@ -110,11 +110,11 @@ static void keep_reg(int r)
 }
 
 /* Generate code to insert a bitfield */
-void insert_bitfield(struct obj *dest,struct obj *src,struct obj *val,int bfs,int bfo,int t,int isclear)
+void insert_bitfield(obj *dest,obj *src,obj *val,int bfs,int bfo,int t,int isclear)
 {
   /*FIXME: shortcut beachten? */
-  struct IC *new;
-  struct obj tmp1,tmp2,tmp3;
+  IC *new;
+  obj tmp1,tmp2,tmp3;
   int vmerk;
   bfo=bflayout(bfo,bfs,t);
   if((dest->flags&REG)&&!regs[dest->reg])
@@ -185,7 +185,7 @@ void insert_bitfield(struct obj *dest,struct obj *src,struct obj *val,int bfs,in
 void inline_memcpy(np z,np q,zmax size)
 /*  fuegt ein ASSIGN-IC ein, das memcpy(z,q,size) entspricht    */
 {
-    struct IC *new=new_IC();
+    IC *new=new_IC();
     if(!ISPOINTER(z->ntyp->flags)) ierror(0);
     if(!ISPOINTER(q->ntyp->flags)) ierror(0);
 
@@ -200,7 +200,7 @@ void inline_memcpy(np z,np q,zmax size)
     }else{
       gen_IC(z,0,0);
       if(z->o.flags&DREFOBJ){
-        struct IC *n2=new_IC();
+        IC *n2=new_IC();
         n2->code=ASSIGN;
         n2->typf=q->ntyp->flags;
         n2->q1=z->o;
@@ -230,7 +230,7 @@ void inline_memcpy(np z,np q,zmax size)
     }else{    
       gen_IC(q,0,0);
       if(q->o.flags&DREFOBJ){
-        struct IC *n2=new_IC();
+        IC *n2=new_IC();
         n2->code=ASSIGN;
         n2->typf=q->ntyp->flags;
         n2->q1=q->o;
@@ -257,7 +257,7 @@ void inline_memcpy(np z,np q,zmax size)
     add_IC(new);
 }
 
-void add_IC(struct IC *new)
+void add_IC(IC *new)
 /*  fuegt ein IC ein                                            */
 {
     int code;
@@ -303,7 +303,7 @@ void add_IC(struct IC *new)
     }
     if(block_vla[nesting]){
       /* special handling for blocks with variable-length arrays */
-      struct llist *p;
+      llist *p;
       if(new->code==LABEL){
 	p=mymalloc(LSIZE);
 	p->label=new->typf;
@@ -325,8 +325,8 @@ void add_IC(struct IC *new)
 	     re-adjust stack, but store the position - label may be
 	     declared later in the same block and adjustement must be
 	     removed */
-	  struct vlaadjust_list *vl;
-	  struct IC *first;
+	  vlaadjust_list *vl;
+	  IC *first;
 	  first=last_ic;
 	  freevl();
 	  first=first->next;
@@ -340,12 +340,12 @@ void add_IC(struct IC *new)
     }
     if(/*(c_flags_val[0].l&2)&&*/code==LABEL){
     /*  entfernt Spruenge zu direkt folgenden Labels    */
-        struct IC *p=last_ic;
+        IC *p=last_ic;
         while(p){
             if(p->typf==new->typf&&p->code>=BEQ&&p->code<=BRA){
-                struct IC *n;
+                IC *n;
 		if(p->code!=BRA){
-		  struct IC *cmp=p->prev;
+		  IC *cmp=p->prev;
 		  while(cmp&&cmp->code==FREEREG) cmp=cmp->prev;
 		  if(cmp->code==TEST){
 		    if(is_volatile_obj(&cmp->q1))
@@ -366,10 +366,10 @@ void add_IC(struct IC *new)
 		}
 		if(vlaadjusts[nesting]){
 		  /* remove it from vlaadjusts-lists, if necessary */
-		  struct vlaadjust_list *vl=vlaadjusts[nesting];
+		  vlaadjust_list *vl=vlaadjusts[nesting];
 		  while(vl){
 		    if(vl->branch==p){
-		      struct IC *np=vl->branch->prev;
+		      IC *np=vl->branch->prev;
 		      while(np!=vl->first->prev){
 			if(!np) ierror(0);
 			np->code=NOP;
@@ -462,7 +462,7 @@ void add_IC(struct IC *new)
     ic_count++;
 
 #if HAVE_POF2OPT
-    if(((new->code==MULT)||((new->code==DIV||new->code==MOD)&&(new->typf&UNSIGNED)))&&(new->q2.flags&KONST)){
+    if(((new->code==MULT)||((new->code==DIV||new->code==MOD)&&(new->typf&UNSIGNED)))&&(new->q2.flags&KONST)&&ISINT(new->typf)){
       /*  ersetzt mul etc. mit Zweierpotenzen     */
       long ln;
       eval_const(&new->q2.val,new->typf);
@@ -495,11 +495,11 @@ void add_IC(struct IC *new)
         free_reg(new->q2.reg);
 }
 
-np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2)
+np gen_libcall(char *fname,np arg1,type *t1,np arg2,type *t2)
 /* generate call to a library function (emulate operation) */
 {
   np new; 
-  struct argument_list *al=0,*t;
+  argument_list *al=0,*t;
   new=new_node();
   new->flags=CALL;
   new->right=0;
@@ -542,7 +542,7 @@ np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2)
   /* Kann man type_expr nochmal auf die Argumente anwenden? */
   if(t1||t2)
     no_cast_free=1;
-  if(!type_expression(new))
+  if(!type_expression(new,0))
     ierror(0); 
   no_cast_free=0;
   gen_IC(new,0,0);
@@ -553,7 +553,7 @@ np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2)
 void gen_IC(np p,int ltrue,int lfalse)
 /*  Erzeugt eine IC-Liste aus einer expression      */
 {
-    struct IC *new; struct regargs_list *rl;
+    IC *new; regargs_list *rl;
     if(!p) return;
 
     if(p->flags==STRING){
@@ -647,7 +647,7 @@ void gen_IC(np p,int ltrue,int lfalse)
     }
 
 #if HAVE_POF2OPT
-    if(((p->flags==MULT||p->flags==PMULT)||((p->flags==DIV||p->flags==MOD)&&(p->ntyp->flags&UNSIGNED)))&&(p->right->flags==CEXPR||p->right->flags==PCEXPR)){
+    if(((p->flags==MULT||p->flags==PMULT)||((p->flags==DIV||p->flags==MOD)&&(p->ntyp->flags&UNSIGNED)))&&(p->right->flags==CEXPR||p->right->flags==PCEXPR)&&ISINT(p->ntyp->flags)){
       /*  ersetzt mul etc. mit Zweierpotenzen     */
       long ln;
       eval_constn(p->right);
@@ -672,7 +672,7 @@ void gen_IC(np p,int ltrue,int lfalse)
     if(!(optflags&2)){
       char *libname;
       if(libname=use_libcall_wrap(p->flags,p->ntyp->flags,0)){
-	np lc;struct Typ *t1,*t2;
+	np lc;type *t1,*t2;
 	if(p->flags==LSHIFT||p->flags==RSHIFT){
 	  t1=clone_typ(p->ntyp);
 	  t2=new_typ();
@@ -754,7 +754,7 @@ void gen_IC(np p,int ltrue,int lfalse)
     }
     if(p->flags==ASSIGNOP){
     /*  das hier ist nicht besonders schoen */
-      struct obj o,q;struct IC *n;int f;char *libname;
+      obj o,q;IC *n;int f;char *libname;
       np lc;
       if(p->right->right==0){
         /*  sowas wie a+=0 wurde wegoptimiert   */
@@ -764,7 +764,7 @@ void gen_IC(np p,int ltrue,int lfalse)
       }
 #if HAVE_LIBCALLS
       if(libname=use_libcall_wrap(p->right->flags,p->right->ntyp->flags,(p->right->flags==LSHIFT||p->right->flags==LSHIFT)?INT:0)){
-	struct Typ *t1,*t2;
+	type *t1,*t2;
 	np a1;
 	gen_IC(p->left,0,0);
 	a1=new_node();
@@ -963,7 +963,7 @@ void gen_IC(np p,int ltrue,int lfalse)
     }
     if(p->flags>=EQUAL&&p->flags<=GREATEREQ){
       int l1,l2,l3,tl,tr;
-      struct Typ *at=0;
+      type *at=0;
       char *libname;
       if(ISVECTOR(p->ntyp->flags)){
 	do_arith(p,new,0,0);
@@ -999,7 +999,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 	  }
         }
         if(ISARITH(tl)&&(tl!=tr||!shortcut(COMPARE,tl))){
-	  struct Typ *t;
+	  type *t;
 	  t=arith_typ(p->left->ntyp,p->right->ntyp);
 	  new->typf=t->flags;
 	  freetyp(t);
@@ -1051,23 +1051,23 @@ void gen_IC(np p,int ltrue,int lfalse)
     }
     if(p->flags==CALL){
         int r=0,radrpush=0;
-	struct obj *op,cfunc,ret_obj;
+	obj *op,cfunc,ret_obj;
 	zmax sz;
         int mregs[MAXR+1];
-	struct IC *callic;
+	IC *callic;
 #ifdef ORDERED_PUSH
-        struct IC *merk_fp,*lp;
+        IC *merk_fp,*lp;
 	unsigned int merk_opushed=opushed;
 #endif
         if(p->left->flags==ADDRESS&&p->left->left->flags==IDENTIFIER){
-            struct Var *v;
+            Var *v;
             gen_IC(p->left,0,0); r=1;
             v=p->left->o.v;
             if(v->fi&&v->fi->first_ic&&!cross_module&&(c_flags_val[0].l&4096)){
             /*  function call inlining  */
-                struct argument_list *al;
-                struct Var *vp,**argl1,**argl2;
-                struct IC *ip;int lc;
+                argument_list *al;
+                Var *vp,**argl1,**argl2;
+                IC *ip;int lc;
                 int arg_cnt=0,i;
                 if(DEBUG&1024){
                     printf("inlining call to <%s>\n",v->identifier);
@@ -1080,8 +1080,8 @@ void gen_IC(np p,int ltrue,int lfalse)
                 }
 
                 /*  Argumente in die ersten Parametervariablen kopieren */
-                argl1=mymalloc(arg_cnt*sizeof(struct Var *));
-                argl2=mymalloc(arg_cnt*sizeof(struct Var *));
+                argl1=mymalloc(arg_cnt*sizeof(Var *));
+                argl2=mymalloc(arg_cnt*sizeof(Var *));
 
                 al=p->alist;vp=v->fi->vars;i=0;
                 while(al){
@@ -1138,7 +1138,7 @@ void gen_IC(np p,int ltrue,int lfalse)
                 /*  Code einfuegen und Labels umschreiben   */
                 ip=v->fi->first_ic;lc=0;
                 while(ip){
-                    struct Var *iv;
+                    Var *iv;
                     int c;
                     new=new_IC();
 		    *new=*ip;
@@ -1207,7 +1207,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 	        if((optflags&2)&&!strcmp(v->identifier,"strlen")&&p->alist&&p->alist->arg){
                     np n=p->alist->arg;
                     if(n->flags==ADDRESSA&&n->left->flags==STRING&&zmeqto(n->left->val.vmax,l2zm(0L))){
-                        struct const_list *cl;zumax len=ul2zum(0UL);
+                        const_list *cl;zumax len=ul2zum(0UL);
                         cl=n->left->cl;
                         while(cl){
 			  if(zmeqto(l2zm(0L),zc2zm(cl->other->val.vchar))) break;
@@ -1228,7 +1228,7 @@ void gen_IC(np p,int ltrue,int lfalse)
                     if(!strcmp(v->identifier,"strcpy")&&p->alist&&p->alist->next&&p->alist->next->arg){
                         np n=p->alist->next->arg;
                         if(n->flags==ADDRESSA&&n->left->flags==STRING&&zmeqto(n->left->val.vmax,l2zm(0L))){
-                            struct const_list *cl;zmax len=l2zm(0L);
+                            const_list *cl;zmax len=l2zm(0L);
                             cl=n->left->cl;
                             while(cl){
                                 len=zmadd(len,l2zm(1L));
@@ -1271,12 +1271,12 @@ void gen_IC(np p,int ltrue,int lfalse)
 #endif
 #ifdef HAVE_REGPARMS
         if(!ffreturn(p->ntyp)&&(p->ntyp->flags&NQ)!=VOID){
-          struct IC *new2;static struct Typ ptyp={0};
-	  struct reg_handle reg_handle=empty_reg_handle;
+          IC *new2;static type ptyp={0};
+	  treg_handle reg_handle=empty_reg_handle;
 	  int reg;
 	  ptyp.next=p->ntyp;
 	  ptyp.flags=POINTER_TYPE(p->ntyp);
-	  reg=reg_parm(&reg_handle,&ptyp,0,p->left->ntyp);
+	  reg=reg_parm(&reg_handle,&ptyp,0,p->left->ntyp->next);
 	  if(reg){
 	    new2=new_IC();
 	    new2->code=ADDRESS;
@@ -1300,7 +1300,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 	      handle_reglist(rl,0);
 	  }
 	}else{
-	  struct reg_handle reg_handle=empty_reg_handle;
+	  treg_handle reg_handle=empty_reg_handle;
 	  sz=push_args(p->alist,p->left->ntyp->next->exact,0,&rl,&reg_handle,0,0,-1,p->left->ntyp);
 	  if(optflags&2)
 	    handle_reglist(rl,0);
@@ -1348,7 +1348,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 #if 0
         if(optflags&2){
             while(rl){
-                struct regargs_list *m;
+                regargs_list *m;
                 new=new_IC();
                 new->code=NOP;
                 new->q1.flags=VAR;
@@ -1406,7 +1406,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 	if(p->alist){
 	  /* insert list of argument ICs */
 	  int i=0;
-	  struct argument_list *a=p->alist;
+	  argument_list *a=p->alist;
 	  while(a){i++;a=a->next;}
 	  new->arg_cnt=i;
 	  new->arg_list=mymalloc(sizeof(*new->arg_list)*i);
@@ -1423,7 +1423,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 
         if(optflags&2){
             while(rl){
-                struct regargs_list *m;
+                regargs_list *m;
                 new=new_IC();
                 new->code=NOP;
                 new->q1.flags=VAR;
@@ -1455,7 +1455,7 @@ void gen_IC(np p,int ltrue,int lfalse)
                   get_scratch(&new->z,p->ntyp->flags,0,p->ntyp);
                 }else{
                   /* Suche geeignetes Register, um Rueckgabewert zu speichern. */
-                  struct regargs_list *l2;
+                  regargs_list *l2;
                   int r;
                   r=new->q1.reg;
                   if(regs[r]||!regok(r,p->ntyp->flags,0)||(reg_pair(r,&rp)&&(regs[rp.r1]||regs[rp.r2]))){
@@ -1505,7 +1505,7 @@ void gen_IC(np p,int ltrue,int lfalse)
         }
         /*  Evtl. gespeicherte Registerargumente wiederherstellen.  */
         while(rl){
-            struct regargs_list *m;
+            regargs_list *m;
             if(rl->v){
 	      int r;
 	      for(r=MAXR;r>=1;r--){
@@ -1533,7 +1533,7 @@ void gen_IC(np p,int ltrue,int lfalse)
         /* If arguments have been pushed nested we have to copy them and */
         /* push them later. */
         if(merk_fp&&opushed!=merk_opushed){
-          struct IC *p,*m=0,*np;
+          IC *p,*m=0,*np;
           if(!lp) ierror(0);
           for(p=merk_fp;p;){
             np=p->next;
@@ -1575,10 +1575,10 @@ void gen_IC(np p,int ltrue,int lfalse)
         return;
     }
     if(p->flags>=PREINC&&p->flags<=POSTDEC){
-        struct obj o;
+        obj o;
 #if HAVE_LIBCALLS
 	char *libname;
-	struct node tn={ADD},one={CEXPR};
+	node tn={ADD},one={CEXPR};
 #endif
         gen_IC(p->left,0,0);
         if((p->flags==POSTINC||p->flags==POSTDEC)){
@@ -1728,7 +1728,7 @@ void gen_IC(np p,int ltrue,int lfalse)
     }
     if(p->flags==BITFIELD){
       int lsc,rsc,bfo;
-      struct obj tmp;
+      obj tmp;
       bfo=bflayout(p->bfo,p->bfs,p->ntyp->flags);
       lsc=zm2l(zmmult(sizetab[p->ntyp->flags&NQ],char_bit))-p->bfs-bfo;
       rsc=lsc+bfo;
@@ -1760,9 +1760,9 @@ void gen_IC(np p,int ltrue,int lfalse)
     p->o.flags=0;
 }
 
-static void handle_reglist(struct regargs_list *nrl,struct obj *radr)
+static void handle_reglist(regargs_list *nrl,obj *radr)
 {
-  struct IC *new;
+  IC *new;
   /*  Letztes Argument; jetzt in Register laden.  */
 #ifdef HAVE_REGPARMS
   int didradr=0;
@@ -1798,16 +1798,16 @@ static void handle_reglist(struct regargs_list *nrl,struct obj *radr)
 }
 
 #ifdef HAVE_REGPARMS
-zmax push_args(struct argument_list *al,struct struct_declaration *sd,int n,struct regargs_list **rl,struct reg_handle *reg_handle,struct obj *radr,struct Typ *rtype,int rreg,struct Typ *fkt)
+zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl,treg_handle *reg_handle,obj *radr,type *rtype,int rreg,type *fkt)
 #else
-zmax push_args(struct argument_list *al,struct struct_declaration *sd,int n,struct regargs_list **rl)
+zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
 #endif
 /*  Legt die Argumente eines Funktionsaufrufs in umgekehrter Reihenfolge    */
 /*  auf den Stack. Es wird Integer-Erweiterung vorgenommen und float wird   */
 /*  nach double konvertiert, falls kein Prototype da ist.                   */
 {
-    int t,reg,regpush,evaluated=0;struct Typ *ft;
-    struct IC *new;struct regargs_list *nrl;zmax sz,rsz,of;struct obj *arg;
+    int t,reg,regpush,evaluated=0;type *ft;
+    IC *new;regargs_list *nrl;zmax sz,rsz,of;obj *arg;
 #ifdef HAVE_REGPARMS
     int stdreg;
     if(!al&&!radr) return(0);
@@ -1815,12 +1815,12 @@ zmax push_args(struct argument_list *al,struct struct_declaration *sd,int n,stru
       stdreg=rreg;
     }else{
       if(n<sd->count){
-        stdreg=reg_parm(reg_handle,(*sd->sl)[n].styp,0,fkt);
+        stdreg=reg_parm(reg_handle,(*sd->sl)[n].styp,0,fkt->next);
       }else{
         if(sd->count)
-          stdreg=reg_parm(reg_handle,al->arg->ntyp,1,fkt);
+          stdreg=reg_parm(reg_handle,al->arg->ntyp,1,fkt->next);
         else
-          stdreg=reg_parm(reg_handle,al->arg->ntyp,0,fkt);
+          stdreg=reg_parm(reg_handle,al->arg->ntyp,0,fkt->next);
       }
     }
     reg=stdreg;
@@ -1862,14 +1862,18 @@ zmax push_args(struct argument_list *al,struct struct_declaration *sd,int n,stru
 #ifdef ORDERED_PUSH
     if(reg==0||regpush){
       new=new_IC();
+#ifdef HAVE_REGPARMS
       if(!radr&&!evaluated){
+#endif
         gen_IC(al->arg,0,0);
         convert(al->arg,t);
         evaluated=1;
         new->q1=al->arg->o;
 	al->pushic=new;
+#ifdef HAVE_REGPARMS
       }else
         new->q1=*radr;
+#endif
       /*  Parameteruebergabe ueber Stack. */
       new->code=PUSH;
       new->typf=t;
@@ -1946,7 +1950,7 @@ zmax push_args(struct argument_list *al,struct struct_declaration *sd,int n,stru
 #endif
     if(reg){
         /*  Parameteruebergabe in Register. */
-        struct Var *v=0; struct Typ *t2;
+        Var *v=0; type *t2;
         if(optflags&2){
         /*  Version fuer Optimizer. */
             t2=new_typ();
@@ -2004,7 +2008,7 @@ zmax push_args(struct argument_list *al,struct struct_declaration *sd,int n,stru
 	  }else{
 	    if((arg->flags&(REG|SCRATCH))!=(REG|SCRATCH)||arg->reg!=reg){
 	      int r=0;
-              struct regargs_list *p;
+              regargs_list *p;
 
 	      /* register pairs */
 	      if(reg_pair(reg,&rp)){
@@ -2061,7 +2065,7 @@ zmax push_args(struct argument_list *al,struct struct_declaration *sd,int n,stru
             new->q1=*arg;
             /* Testen, ob Quellregister gesichert wurde. Unschoen. */
             if((new->q1.flags&REG)){
-              struct regargs_list *p;
+              regargs_list *p;
               for(p=*rl;p;p=p->next){
 		int r;
                 if(p->v&&(r=abs(p->reg))){
@@ -2101,11 +2105,11 @@ void convert(np p,int f)
 /*  konvertiert das Objekt in p->o in bestimmten Typ    */
 /* wenn volatile_convert gesetzt ist, wird immer IC erzeugt */
 {
-  struct IC *new;
+  IC *new;
   int o=p->ntyp->flags;
   int to,tn,mc,dr;
-  static struct node n,nn;
-  static struct Typ nt;
+  static node n,nn;
+  static type nt;
   char *libname;
   if((f&NQ)==VOID) return;
 
@@ -2124,9 +2128,9 @@ void convert(np p,int f)
      (AVOID_UNSIGNED_TO_FLOAT&&ISFLOAT(f)&&(o&UNSIGNED))){
     union atyps val;
     int l1,l2,it;
-    struct Var *tmp;
+    Var *tmp;
     np t;
-    struct Typ *ttyp;
+    type *ttyp;
     if(f&UNSIGNED)
       it=f&NQ;
     else
@@ -2236,7 +2240,7 @@ void convert(np p,int f)
   n.left=&nn;
   nn.ntyp=p->ntyp;
   if((libname=use_libcall_wrap(CONVERT,tn,to))&&mc){
-    struct node *n=new_node();
+    node *n=new_node();
     n->flags=REINTERPRET;
     n->o=p->o;
     n->ntyp=p->ntyp;
@@ -2273,7 +2277,7 @@ void convert(np p,int f)
 void alloc_hardreg(int r)
 /*  Belegt Register r.  */
 {
-  struct IC *new;
+  IC *new;
   if(nocode) return;
   if(DEBUG&16) printf("allocated %s\n",regnames[r]);
   regs[r]=1;regused[r]++;
@@ -2312,7 +2316,7 @@ int allocreg(int f,int mode)
 void free_reg(int r)
 /*  Gibt Register r frei                                */
 {
-    struct IC *new;
+    IC *new;
     if(!r||nocode) return;
     if(regs[r]==0)
       {printf("Register %d(%s):\n",r,regnames[r]);ierror(0);}
@@ -2333,18 +2337,18 @@ void free_reg(int r)
 void gen_label(int l)
 /*  Erzeugt ein Label                                   */
 {
-    struct IC *new;
+    IC *new;
     new=new_IC();
     new->code=LABEL;
     new->typf=l;
     new->q1.flags=new->q2.flags=new->z.flags=0;
     add_IC(new);
 }
-void gen_cond(struct obj *p,int m,int l1,int l2)
+void gen_cond(obj *p,int m,int l1,int l2)
 /*  Generiert code, der 0 oder 1 in Register schreibt. Schreibt obj nach p. */
 {
-    struct IC *new;
-    struct obj omerk;
+    IC *new;
+    obj omerk;
     new=new_IC();
     new->code=ASSIGN;
     new->typf=INT;
@@ -2376,11 +2380,11 @@ void gen_cond(struct obj *p,int m,int l1,int l2)
     gen_label(l2);
     *p=omerk;
 }
-void scratch_var(struct obj *o,int t,struct Typ *typ)
+void scratch_var(obj *o,int t,type *typ)
 /*  liefert eine temporaere Variable                            */
 /*  nicht effizient, aber wer hat schon so wenig Register...    */
 {
-  struct Typ *nt;
+  type *nt;
   if(!ISSCALAR(t)&&!ISVECTOR(t)){
     if(!typ) ierror(0);
     nt=clone_typ(typ);
@@ -2396,7 +2400,7 @@ void scratch_var(struct obj *o,int t,struct Typ *typ)
   o->v=add_var(empty,nt,AUTO,0);
   o->val.vmax=l2zm(0L);
 }
-void get_scratch(struct obj *o,int t1,int t2,struct Typ *typ)
+void get_scratch(obj *o,int t1,int t2,type *typ)
 /*  liefert ein Scratchregister oder eine Scratchvariable       */
 {
     if(!(optflags&2)&&(o->reg=allocreg(t1,t2))){
@@ -2405,7 +2409,7 @@ void get_scratch(struct obj *o,int t1,int t2,struct Typ *typ)
         scratch_var(o,t1,typ);
     }
 }
-int do_arith(np p,struct IC *new,np dest,struct obj *o)
+int do_arith(np p,IC *new,np dest,obj *o)
 /*  erzeugt IC new fuer einen arithmetischen Knoten und speichert das   */
 /*  Resultat vom Unterknoten dest in o (fuer a op= b)               */
 /*  liefert 0, wenn dest nicht gefunden                             */
@@ -2453,13 +2457,24 @@ int do_arith(np p,struct IC *new,np dest,struct obj *o)
       p->o=new->z;
       add_IC(new);
       if(!zmleq(szof(p->left->ntyp->next),l2zm(1L))){
+	long ln;
 	new=new_IC();
-	new->code=DIV;
 	new->q1=p->o;
 	new->q2.flags=KONST;
 	gval.vmax=szof(p->left->ntyp->next);
 	eval_const(&gval,MAXINT);
-	insert_const(&new->q2.val,dt);
+	if(ln=get_pof2(vumax)){
+	  /* Division immer ohne Rest, daher shift möglich */
+	  /* TODO: Haben wir Targets ohne arith. shift right? */
+	  gval.vmax=l2zm(ln-1);
+	  eval_const(&gval,MAXINT);
+	  insert_const(&new->q2.val,INT);
+	  new->typf2=INT;
+	  new->code=RSHIFT;
+	}else{
+	  insert_const(&new->q2.val,dt);
+	  new->code=DIV;
+	}
 	new->z=p->o;
 	new->typf=dt;
 	add_IC(new);
@@ -2482,9 +2497,17 @@ int do_arith(np p,struct IC *new,np dest,struct obj *o)
       new->typf2=p->ntyp->flags;
       new->q1=p->left->o;
       /*  kleinere Typen als MINADDI2P erst in diesen wandeln */
-      if((new->typf&NQ)<MINADDI2P){convert(p->right,MINADDI2P);new->typf=MINADDI2P;}
+      if(new->typf&UNSIGNED){
+	if((new->typf&NQ)<(MINADDUI2P&NQ)){convert(p->right,MINADDUI2P);new->typf=MINADDUI2P;}
+      }else{
+	if((new->typf&NQ)<MINADDI2P){convert(p->right,MINADDI2P);new->typf=MINADDI2P;}
+      }
       /*  groessere Typen als MAXADDI2P erst in diesen wandeln */
-      if((new->typf&NQ)>MAXADDI2P){convert(p->right,MAXADDI2P);new->typf=MAXADDI2P;}      
+      if(new->typf&UNSIGNED){
+	if((new->typf&NQ)>(MAXADDI2P&NQ)){convert(p->right,MAXADDUI2P);new->typf=MAXADDUI2P;}      
+      }else{
+	if((new->typf&NQ)>MAXADDI2P){convert(p->right,MAXADDI2P);new->typf=MAXADDI2P;}      
+      }
       if((p->left->o.flags&VARADR)&&(p->right->o.flags&KONST)){
 	eval_const(&p->right->o.val,p->right->ntyp->flags);
 	p->o=p->left->o;
@@ -2515,7 +2538,7 @@ int do_arith(np p,struct IC *new,np dest,struct obj *o)
 	new->typf2=INT;
       }
 #if 0
-      struct Typ *st;
+      type *st;
       st=clone_typ(p->right->ntyp);
       /*st->flags=int_erw(st->flags);*/
       st->flags=INT;
@@ -2570,11 +2593,11 @@ int do_arith(np p,struct IC *new,np dest,struct obj *o)
 
     return f;
 }
-void savescratch(int code,struct IC *p,int dontsave,struct obj *o)
+void savescratch(int code,IC *p,int dontsave,obj *o)
 /*  speichert Scratchregister bzw. stellt sie wieder her (je nach code  */
 /*  entweder MOVEFROMREG oder MOVETOREG)                                */
 {
-  int i,s,e,b,ds1,ds2;struct IC *new;
+  int i,s,e,b,ds1,ds2;IC *new;
   if(code==MOVETOREG){ s=1;e=MAXR+1;b=1;} else {s=MAXR;e=0;b=-1;}
   if(reg_pair(dontsave,&rp)){
     ds1=rp.r1;
@@ -2591,7 +2614,7 @@ void savescratch(int code,struct IC *p,int dontsave,struct obj *o)
     if(mustsave) simple_scratch[i]=1;
     if(regs[i]&&!(regs[i]&32)&&mustsave&&i!=dontsave&&i!=ds1&&i!=ds2&&!reg_pair(i,&rp)){
       if(!regsbuf[i]){
-	struct Typ *t;
+	type *t;
 	if(code!=MOVEFROMREG) continue;
 	t=clone_typ(regtype[i]);
 	regsbuf[i]=add_var(empty,t,AUTO,0);
