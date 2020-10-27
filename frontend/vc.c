@@ -568,6 +568,7 @@ int main(int argc,char *argv[])
 #ifdef AMIGA
         if(pm&&parm!=cmfiles)
             if(MatchFirst((STRPTR)convert_path(parm),ap)){
+                MatchEnd(ap);
                 printf("No match for %s\n",parm);
                 rc=RETURN_WARN;
                 continue;
@@ -712,6 +713,7 @@ int main(int argc,char *argv[])
 #endif
                     if(SystemTags(command,NP_Priority,-2,TAG_DONE)){
                         printf("%s failed\n",command);
+                        if(pm) MatchEnd(ap);
                         raus(EXIT_FAILURE);
                     }
                 }else

@@ -1,4 +1,4 @@
-/*  $VER: vbcc (opt.c) V0.8     */
+/*  $VER: vbcc (opt.c) $Revision: 1.11 $    */
 /*  allgemeine Routinen fuer den Optimizer und Steuerung der einzelnen  */
 /*  Laeufe                                                              */
 
@@ -14,10 +14,10 @@ int have_alias;
 int static_cse=1,dref_cse=1;
 
 #ifdef ALEX_REG
-extern struct flowgraph *pFg;
+extern flowgraph *pFg;
 #endif
 
-void insert_IC(struct IC *p,struct IC *new)
+void insert_IC(IC *p,IC *new)
 /*  fuegt new hinter p ein; p darf 0 sein                           */
 {
   if((new->code==ADDI2P||new->code==SUBIFP||new->code==SUBPFP)&&!ISPOINTER(new->typf2))
@@ -42,16 +42,16 @@ int norek;      /*  diese Funktion wird nicht rekursiv auf          */
 int nocall;     /*  diese Funktion kehrt nicht zum Caller zurueck   */
 
 #if HAVE_LIBCALLS
-extern np gen_libcall(char *fname,np arg1,struct Typ *t1,np arg2,struct Typ *t2);
+extern np gen_libcall(char *fname,np arg1,type *t1,np arg2,type *t2);
 
 
 /* insert libcalls just before register allocation */
-static int insert_libcalls(struct flowgraph *fg)
+static int insert_libcalls(flowgraph *fg)
 {
-  struct IC *p,*next,*add;
+  IC *p,*next,*add;
   int replaced=0;
-  static struct node n,nl,nr;
-  static struct Typ t,tl,tr;
+  static node n,nl,nr;
+  static type t,tl,tr;
   if(DEBUG&1024) printf("insert_libcalls\n");
   while(fg){
     for(p=fg->start;p;p=next){
@@ -60,9 +60,9 @@ static int insert_libcalls(struct flowgraph *fg)
       next=p->next;
       if((c>=OR&&c<=XOR)||(c>=LSHIFT&&c<=KOMPLEMENT)||c==COMPARE||c==CONVERT||c==MINUS||c==TEST){
 	if(libname=use_libcall(c,p->typf,p->typf2)){
-	  struct IC *merk_first,*merk_last;
-	  static struct node n1,n2;
-	  static struct Typ t1,t2;
+	  IC *merk_first,*merk_last;
+	  static node n1,n2;
+	  static type t1,t2;
 	  if(DEBUG&1024){
 	    printf("converting IC to libcall:\n");
 	    pric2(stdout,p);
@@ -97,7 +97,7 @@ static int insert_libcalls(struct flowgraph *fg)
 	  if(p->z.flags){
 	    remove_IC_fg(fg,p);
 	  }else{
-	    struct Typ *t=new_typ();
+	    type *t=new_typ();
 	    t->flags=INT;
 	    p->code=TEST;
 	    p->typf=INT;
@@ -120,7 +120,7 @@ static int insert_libcalls(struct flowgraph *fg)
 /*  temporary fuer verschiedene Bitvektoren */
 bvtype *tmp;
 
-int in_varlist(struct varlist *vl,int cnt,struct Var *v,int flags)
+int in_varlist(varlist *vl,int cnt,Var *v,int flags)
 {
   int i;
   /*FIXME: slow */
@@ -132,7 +132,7 @@ int in_varlist(struct varlist *vl,int cnt,struct Var *v,int flags)
 
 static void add_call_list(void)
 {
-  struct IC *p;
+  IC *p;
   for(p=first_ic;p;p=p->next){
     if(p->code==CALL&&p->call_cnt==0){
       if((p->q1.flags&(VAR|DREFOBJ))==VAR){
@@ -145,9 +145,9 @@ static void add_call_list(void)
   }
 }
 
-void calc_finfo(struct Var *v,int flags)
+void calc_finfo(Var *v,int flags)
 {
-  struct IC *p;int i,known,maxtyp,t,c;
+  IC *p;int i,known,maxtyp,t,c;
   /* 128 types should be enough for everyone :-) */
   #define TSIZE BVSIZE(128)
   static bvtype tf[TSIZE];
@@ -183,7 +183,7 @@ void calc_finfo(struct Var *v,int flags)
 	    if(p->q1.v->fi->use_list[i].v){
 	      if(!in_varlist(v->fi->use_list,v->fi->use_cnt,p->q1.v->fi->use_list[i].v,p->q1.v->fi->use_list[i].flags)){
 		v->fi->use_cnt++;
-		v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(struct varlist));
+		v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(varlist));
 		v->fi->use_list[v->fi->use_cnt-1]=p->q1.v->fi->use_list[i];
 	      }
 	    }else{
@@ -196,7 +196,7 @@ void calc_finfo(struct Var *v,int flags)
 	  if(p->use_list[i].v->nesting!=0) continue;
 	  if(!in_varlist(v->fi->use_list,v->fi->use_cnt,p->use_list[i].v,p->use_list[i].flags)){
 	    v->fi->use_cnt++;
-	    v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(struct varlist));
+	    v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(varlist));
 	    v->fi->use_list[v->fi->use_cnt-1]=p->use_list[i];
 	  }
 	}
@@ -205,7 +205,7 @@ void calc_finfo(struct Var *v,int flags)
     for(c=0;c<=maxtyp;c++){
       if(BTST(tf,c)){
 	v->fi->use_cnt++;
-	v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(struct varlist));
+	v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(varlist));
 	v->fi->use_list[v->fi->use_cnt-1].v=0;
 	v->fi->use_list[v->fi->use_cnt-1].flags=c;
       }
@@ -238,7 +238,7 @@ void calc_finfo(struct Var *v,int flags)
 	    if(p->q1.v->fi->change_list[i].v){
 	      if(!in_varlist(v->fi->change_list,v->fi->change_cnt,p->q1.v->fi->change_list[i].v,p->q1.v->fi->change_list[i].flags)){
 		v->fi->change_cnt++;
-		v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(struct varlist));
+		v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(varlist));
 		v->fi->change_list[v->fi->change_cnt-1]=p->q1.v->fi->change_list[i];
 	      }
 	    }else{
@@ -251,7 +251,7 @@ void calc_finfo(struct Var *v,int flags)
 	  if(p->change_list[i].v->nesting!=0) continue;
 	  if(!in_varlist(v->fi->change_list,v->fi->change_cnt,p->change_list[i].v,p->change_list[i].flags)){
 	    v->fi->change_cnt++;
-	    v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(struct varlist));
+	    v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(varlist));
 	    v->fi->change_list[v->fi->change_cnt-1]=p->change_list[i];
 	  }
 	}
@@ -260,7 +260,7 @@ void calc_finfo(struct Var *v,int flags)
     for(c=0;c<=maxtyp;c++){
       if(BTST(tf,c)){
 	v->fi->change_cnt++;
-	v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(struct varlist));
+	v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(varlist));
 	v->fi->change_list[v->fi->change_cnt-1].v=0;
 	v->fi->change_list[v->fi->change_cnt-1].flags=c;
       }
@@ -280,7 +280,7 @@ void calc_finfo(struct Var *v,int flags)
 	if(p->q1.flags&DREFOBJ) return;
 	if(!in_varlist(v->fi->call_list,v->fi->call_cnt,p->q1.v,0)){
 	  v->fi->call_cnt++;
-	  v->fi->call_list=myrealloc(v->fi->call_list,v->fi->call_cnt*sizeof(struct varlist));
+	  v->fi->call_list=myrealloc(v->fi->call_list,v->fi->call_cnt*sizeof(varlist));
 	  v->fi->call_list[v->fi->call_cnt-1].v=p->q1.v;
 	  v->fi->call_list[v->fi->call_cnt-1].flags=0;
 	}
@@ -290,7 +290,7 @@ void calc_finfo(struct Var *v,int flags)
   }
 }
 
-void used_clist(struct Typ *t,struct const_list *cl)
+void used_clist(type *t,const_list *cl)
 {
   int i;zmax l;
   if(ISARRAY(t->flags)){
@@ -305,7 +305,7 @@ void used_clist(struct Typ *t,struct const_list *cl)
     return;
   }
   if(ISSTRUCT(t->flags)){
-    struct Typ *st;
+    type *st;
     for(i=0;i<t->exact->count&&cl;i++){
       st=(*t->exact->sl)[i].styp;
       if(!(*t->exact->sl)[i].identifier) ierror(0);
@@ -321,13 +321,13 @@ void used_clist(struct Typ *t,struct const_list *cl)
   return;
 }
 
-void used_objects(struct Var *v)
+void used_objects(Var *v)
 {
   int i;
   if(v->flags&REFERENCED) return;
   v->flags|=REFERENCED;
   if(ISFUNC(v->vtyp->flags)){
-    struct IC *p;
+    IC *p;
     if(!(v->flags&DEFINED)) return;
     if(!v->fi) ierror(0);
     for(i=0;i<v->fi->call_cnt;i++){
@@ -347,13 +347,13 @@ void used_objects(struct Var *v)
 
 zmax recalc_start_offset;
 
-void recalc_offsets(struct flowgraph *fg)
+void recalc_offsets(flowgraph *fg)
 /*  berechnet Offsets fuer auto-Variablen neu und versucht, fuer Variablen, */
 /*  die nicht gleichzeitig aktiv sind, den gleichen Platz zu belegen        */
 {
   int i,b,*eqto;size_t bsize;zmax *al,*sz;
   bvtype **used,*tmp,*empty;
-  struct IC *p;
+  IC *p;
 
   if(DEBUG&1024) printf("recalculating offsets\n");
   if(DEBUG&1024) printf("setting up arrays\n");
@@ -466,7 +466,7 @@ void recalc_offsets(struct flowgraph *fg)
   free(empty);
   free(eqto);
 }
-void remove_IC_fg(struct flowgraph *g,struct IC *p)
+void remove_IC_fg(flowgraph *g,IC *p)
 /*  Entfernt IC p und beachtet Flussgraph. Ausserdem werden             */
 /*  use/change-Listen freigegeben.                                      */
 {
@@ -487,7 +487,7 @@ void remove_IC_fg(struct flowgraph *g,struct IC *p)
 /* allowed to create new variables */
 int early_peephole(void)
 {
-  struct IC *p;
+  IC *p;
   int changed,gchanged=0,c,t;
   do{
     changed=0;
@@ -496,7 +496,7 @@ int early_peephole(void)
       c=p->code;
       t=p->typf;
       if(c==COMPARE&&(p->q2.flags&KONST)&&ISINT(p->typf)){
-	struct case_table *ct;
+	case_table *ct;
 	if((ct=calc_case_table(p,JUMP_TABLE_DENSITY))&&ct->num>1&&ct->density==1){
 	  int i;
 	  for(i=0;i<ct->num;i++){
@@ -504,8 +504,8 @@ int early_peephole(void)
 	      break;
 	  }
 	  if(i>=ct->num){
-	    struct IC *new;
-	    static struct Typ ityp;
+	    IC *new;
+	    static type ityp;
 	    if(DEBUG&1024) printf("converting cases to range-check\n");
 	    if(multiple_ccs) ierror(0);
 	    new=new_IC();
@@ -538,7 +538,7 @@ int early_peephole(void)
 	    new->typf=ct->labels[0];
 	    insert_IC(p->prev,new);
  	    while(p!=ct->next_ic){
-	      struct IC *m=p->next;
+	      IC *m=p->next;
 	      remove_IC(p);
 	      p=m;
 	    }
@@ -557,7 +557,7 @@ int early_peephole(void)
 int peephole()
 /*  macht alle moeglichen Vereinfachungen/Vereinheitlichungen   */
 {
-  struct IC *p;struct obj o;int t,c,null,eins,changed,done=0;
+  IC *p;obj o;int t,c,null,eins,changed,done=0;
   function_calls=0;
   do{
     if(DEBUG&1024) printf("searching for peephole optimizations\n");
@@ -567,7 +567,7 @@ int peephole()
       c=p->code;
       t=p->typf;
       if(c==NOP&&!p->q1.flags&&!p->q2.flags&&!p->z.flags){
-	struct IC *m;
+	IC *m;
 	if(DEBUG&1024) printf("removing nop\n");
 	m=p;p=p->next;
 	remove_IC(m);
@@ -580,7 +580,7 @@ int peephole()
       if(c==COMPARE&&(p->q2.flags&(KONST|DREFOBJ))==KONST){
 	eval_const(&p->q2.val,t);
 	if(ISINT(t)&&zmeqto(vmax,l2zm(1L))&&zumeqto(vumax,ul2zum(1UL))){
-	  struct IC *p2=p->next;
+	  IC *p2=p->next;
 	  if(p2->code==BGE){
 	    vmax=l2zm(0L);insert_const(&gval,MAXINT);
 	    p->q2.val=gval;p2->code=BGT;changed=1;
@@ -591,7 +591,7 @@ int peephole()
 	    if(DEBUG&1024) printf("cmp #1 replaced by cmp #0(2)\n");
 	  }
 	}else if(ISINT(t)&&!(t&UNSIGNED)&&zmeqto(vmax,l2zm(-1L))){
-	  struct IC *p2=p->next;
+	  IC *p2=p->next;
 	  if(p2->code==BGT){
 	    vmax=l2zm(0L);insert_const(&gval,MAXINT);
 	    p->q2.val=gval;p2->code=BGE;changed=1;
@@ -604,7 +604,7 @@ int peephole()
 	}
       }
       if(c>=BEQ&&c<BRA&&p->next&&p->next->code==BRA&&p->typf==p->next->typf){
-	struct IC *p2,*m;
+	IC *p2,*m;
 	if(DEBUG&1024){
 	  printf("removing bcc followed by bra\n");
 	  pric2(stdout,p);
@@ -626,7 +626,7 @@ int peephole()
       if(c==CALL) function_calls++;
       if((p->q1.flags&(KONST|DREFOBJ))==KONST){
 	if(((p->q2.flags&(KONST|DREFOBJ))==KONST)||!p->q2.flags){
-	  struct IC *old=p->prev;
+	  IC *old=p->prev;
 	  if(fold(p)){ changed=1; p=old;continue;}
 	  p=p->next;continue;
 	}else{
@@ -634,7 +634,7 @@ int peephole()
 	    if(DEBUG&1024){ printf("swapped commutative op:\n");pric2(stdout,p);}
 	    o=p->q1;p->q1=p->q2;p->q2=o;
 	    if(c==COMPARE){
-	      struct IC *br=p->next;
+	      IC *br=p->next;
 	      if(br->code==BLT) br->code=BGT;
 	      else if(br->code==BLE) br->code=BGE;
 	      else if(br->code==BGT) br->code=BLT;
@@ -675,7 +675,7 @@ int peephole()
 	}
 
 	if((c==SUB||c==ADD||c==ADDI2P||c==SUBIFP)&&!(q2typ(p)&UNSIGNED)&&zmleq(vmax,l2zm(0L))&&zldleq(vldouble,d2zld(0.0))){
-	  struct obj o;int ct=q2typ(p);
+	  obj o;int ct=q2typ(p);
 	  o=p->q2;
 	  calc(MINUS,ct,&o.val,0,&o.val,0);
 	  eval_const(&o.val,ct);
@@ -709,7 +709,7 @@ int peephole()
 	}
 	if((ISINT(t)||fp_assoc)&&(c==ADD||c==SUB||c==ADDI2P||c==SUBIFP||c==MULT||c==LSHIFT||c==RSHIFT||c==OR||c==AND)){
 	  /*  assoziative Operatoren  */
-	  struct IC *n=p->next;
+	  IC *n=p->next;
 	  int nc,tp,tn;
 	  tp=q2typ(p);
 	  if(n){
@@ -779,7 +779,7 @@ int peephole()
 	}
 	if((c==ADD||c==SUB)&&ISINT(t)&&p->next&&p->next->next){
 	  /*FIXME: using SCRATCH is not nice */
-	  struct IC *p1=p->next,*p2=p1->next;
+	  IC *p1=p->next,*p2=p1->next;
 	  if(p1->code==MULT&&p2->code==ADDI2P&&
 	     p1->typf==t&&p2->typf==t&&
 	     (p1->q2.flags&KONST)&&(p->z.flags&(SCRATCH|DREFOBJ))==SCRATCH&&(p1->z.flags&(SCRATCH|DREFOBJ))==SCRATCH&&
@@ -829,7 +829,7 @@ int peephole()
       }
       if(!USEQ2ASZ&&p->z.flags&&!compare_objs(&p->q2,&p->z,p->typf)){
 	if(c==ADD||c==MULT||(c>=OR&&c<=AND)){
-	  struct obj o;
+	  obj o;
 	  if(DEBUG&1024){printf("swapping objs because USEQ2ASZ\n");pric2(stdout,p);}
 	  o=p->q2;p->q2=p->q1;p->q1=o;
 	  /*  kein changed hier!  */
@@ -837,7 +837,7 @@ int peephole()
       }
       if((c==ADD||c==SUB)&&p->next){
 	/*FIXME: using SCRATCH is not nice */
-	struct IC *p1=p->next;
+	IC *p1=p->next;
 	if(p1->code==ADDI2P&&p1->typf==t&&(p->z.flags&(SCRATCH|DREFOBJ))==SCRATCH&&!compare_objs(&p->z,&p1->q2,t)){
 	  if(DEBUG&1024){ printf("rearranging array-access(2):\n");pric2(stdout,p);pric2(stdout,p1);}
 	  p1->q2=p->q1;
@@ -858,7 +858,7 @@ int peephole()
 	changed=1;
       }
       if(c==ASSIGN&&(p->z.flags&VAR)&&p->z.flags==p->q1.flags&&p->z.v==p->q1.v&&zmeqto(p->z.val.vmax,p->q1.val.vmax)){
-	struct IC *d;
+	IC *d;
 	if(DEBUG&1024){ printf("removing redundant move:\n");pric2(stdout,p);}
 	changed=1;
 	d=p; p=p->next;
@@ -866,11 +866,11 @@ int peephole()
 	remove_IC(d); continue;
       }
       if(c>=BEQ&&c<=BGT){
-	struct IC *p2=p->prev;
+	IC *p2=p->prev;
 	if(p2&&p2->code==COMPARE&&!compare_objs(&p->q1,&p2->z,0)){
-	  struct IC *p3=p2->prev;
+	  IC *p3=p2->prev;
 	  if(p3&&p3->code==c){
-	    struct IC *p4=p3->prev;
+	    IC *p4=p3->prev;
 	    if(p4->code==COMPARE&&!compare_objs(&p3->q1,&p4->z,0)
 	       &&!compare_objs(&p2->q1,&p4->q1,p4->typf)&&!compare_objs(&p2->q2,&p4->q2,p4->typf)){
 	      if(DEBUG&1024){printf("removing redundant compare\n");pric2(stdout,p2);pric2(stdout,p);}
@@ -897,8 +897,8 @@ int peephole()
 void insert_loads()
 /*  Laedt Speicher in temporaere Variablen */
 {
-  struct IC *p,*new;
-  struct Typ t={0},v={VOID};
+  IC *p,*new;
+  type t={0},v={VOID};
   int c;
   if(DEBUG&1024) printf("insert_loads()\n");
   for(p=first_ic;p;p=p->next){
@@ -969,7 +969,7 @@ void insert_loads()
 void insert_ccs(void)
 /*  Fuegt Variablen fuer ccs ein.   */
 {
-    struct IC *p; struct Var *v; struct Typ *t;
+    IC *p; Var *v; type *t;
     if(DEBUG&1024) printf("insert_ccs()\n");
     for(p=first_ic;p;p=p->next){
         if(p->code==COMPARE||p->code==TEST){
@@ -994,12 +994,14 @@ void insert_ccs(void)
     }
 }
 
-static int to_be_inlined(struct Var *v)
+static int to_be_inlined(Var *v)
 {
   /* decide whether function should be inlined */
-  int c;struct IC *p;
+  int c;IC *p;
   /* no code available */
   if(!v->fi||!v->fi->first_ic) return 0;
+  /* marked as noinline */
+  if(v->fi->flags&NO_INLINE) return 0;
   /* returns something not in a register (FIXME) */
   if(!ffreturn(v->vtyp->next)&&(v->vtyp->next->flags&NQ)!=VOID) return 0;
   /* varargs function */
@@ -1014,21 +1016,21 @@ static int to_be_inlined(struct Var *v)
   if(c>inline_size) return 0;
   /* we assume that inlining saves size if the number of arguments
      is larger than the number of ICs + CALL +SETRETURN  */
-  if(optsize&&c-2>(c=v->vtyp->exact->count)) return 0;
+  if(optsize&&c-2>(v->vtyp->exact->count)) return 0;
   return 1;
 }
 
 static void cross_module_inline(void)
 {
-  struct IC *p,*np,*new,*ip,*cp,*getreturn;
-  struct Var *v,*vp;
+  IC *p,*np,*new,*ip,*cp,*getreturn;
+  Var *v,*vp;
   int i,c,firstl,lastl;
   if(DEBUG&1024) printf("cross_module_inline()\n");
   for(p=first_ic;p;){
     np=p->next;
     if(p->code==CALL&&(p->q1.flags&(VAR|DREFOBJ))==VAR&&to_be_inlined(p->q1.v)){
       zmax pushed=p->q2.val.vmax;
-      struct IC *gr;
+      IC *gr;
       v=p->q1.v;
       if(DEBUG&1024){
 	printf("inlining call to %s\n",p->q1.v->identifier);
@@ -1067,7 +1069,7 @@ static void cross_module_inline(void)
 	ip=p->arg_list[i];
 	if(ip->code==ASSIGN){
 	  /* find and delete nop for register passing */
-	  struct IC *nop;
+	  IC *nop;
 	  if(!(ip->z.flags&VAR)||ip->z.v->reg==0) ierror(0);
 	  for(nop=ip->next;nop;nop=nop->next){
 	    if(nop->code==NOP&&(nop->q1.flags&(VAR|DREFOBJ))==VAR&&nop->q1.v==ip->z.v)
@@ -1098,7 +1100,7 @@ static void cross_module_inline(void)
 
       if(!zmeqto(pushed,l2zm(0L))){
 	/* ueberfluessige PUSHs entfernen */
-	struct IC *m;
+	IC *m;
 	ip=p->prev;
 	while(1){
 	  m=ip->prev;
@@ -1118,7 +1120,7 @@ static void cross_module_inline(void)
       /*  Code einfuegen und Labels umschreiben   */
       ip=v->fi->first_ic;
       while(ip){
-	struct Var *iv;
+	Var *iv;
 	int c;
 	new=new_IC();
 	*new=*ip;
@@ -1206,14 +1208,14 @@ static void cross_module_inline(void)
 
 #endif
 #define FREEAV free(av_globals);free(av_statics);free(av_drefs);free(av_address);
-void optimize(long flags,struct Var *function)
+void optimize(long flags,Var *function)
 /*  flags:   1=Register, 2=optimize, 4=cse/cp, 8=constant_propagation,  */
 /*          16=dead_assignments, 32=global-optimizations                */
 /*          64=blockweise Registervergabe, 128=loop_optimizations (nur  */
 /*             in Verbindung mit 32), 256=recalc_offsets                */
 {
 #ifndef NO_OPTIMIZER
-  struct flowgraph *g,*fg=0;
+  flowgraph *g,*fg=0;
   int r,i,pass=0,mustrepeat,intask;
   int lc_freed,lc_done=0;
   if(!function) ierror(0);
@@ -1292,7 +1294,7 @@ void optimize(long flags,struct Var *function)
 	    r=constant_propagation(g,(flags&32)&&!(disable&4));
 	    gchanged|=r;
 	    if(r){
-	      struct IC *p;
+	      IC *p;
 	      if(r&2) mustrepeat=1;
 	      r=0;
 	      for(p=g->start;p;p=p->next){
@@ -1453,7 +1455,7 @@ void optimize(long flags,struct Var *function)
 	/*  default-Wert fuer inline-Entscheidung   */
 	if(!cross_module&&!varargs&&(flags&4096)&&(only_inline||ic_count<=inline_size)){
 	  /*  fuer function inlining vorbereiten   */
-	  struct IC *p,*new;
+	  IC *p,*new;
 	  if(DEBUG&1024) printf("function <%s> prepared for inlining(ic_count=%d)\n",function->identifier,ic_count);
 	  if(!function->fi) function->fi=new_fi();
 	  function->fi->first_ic=first_ic;
@@ -1498,7 +1500,7 @@ void optimize(long flags,struct Var *function)
 	    reaching_definitions(fg);
 	    GCAssignRegs(fg,function->identifier);
 	    { 
-	      int stack_used;struct IC *p;
+	      int stack_used;IC *p;
 #if 1
 	      for(p=pFg->start;p;p=p->next){
 		if((p->q1.flags&(REG|VAR))==VAR&&zmleq(l2zm(0L),p->q1.v->offset))

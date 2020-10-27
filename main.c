@@ -1,23 +1,24 @@
-/*  $VER: vbcc (main.c) V0.9    */
+/*  $VER: vbcc (main.c) $Revision: 1.50 $    */
 #include "vbcc_cpp.h"
 #include "vbc.h"
 #include "opt.h"
 static char FILE_[]=__FILE__;
-void do_function(struct Var *);
-static struct function_info *current_fi;
-struct token *ctok;
-struct lexer_state ls;
+void do_function(Var *);
+static function_info *current_fi;
+token *ctok;
+lexer_state ls;
 int endok=1;
 int line,errors;
 bvtype task_preempt_regs[RSIZE/sizeof(bvtype)];
 bvtype task_schedule_regs[RSIZE/sizeof(bvtype)];
 char *multname[]={"","s"};
 
-struct deplist {char *name; struct deplist *next;} *deps;
+typedef struct deplist {char *name; struct deplist *next;} deplist;
+deplist *deps;
 FILE *depout;
 void handle_deps(char *name,int string)
 {
-  struct deplist *p=deps;
+  deplist *p=deps;
   if(!depout||!name||!*name) return;
   /* by default omit <...> includes */
   if(!string&&!(c_flags[51]&USEDFLAG)) return;
@@ -61,7 +62,7 @@ void translation_unit(void)
 /*  bearbeitet translation_unit                                     */
 /*  hier z.Z. nur provisorisch                                      */
 {
-  struct Var *p;
+  Var *p;
   if(cross_module){
     for(p=first_ext;p;p=p->next)
       if(!(p->flags&BUILTIN))
@@ -146,7 +147,7 @@ void misrawarn(char *p) {
 	int rule,subrule,misraoldrule;
 	char* last;
 	int not_found;
-	struct misra_err_out* misr_err;
+	tmisra_err_out* misr_err;
 	rule = 0;
 	subrule = 0;
 	misraoldrule = 0;
@@ -214,7 +215,7 @@ void misradontwarn(char *p) {
 	int rule,subrule,misraoldrule;
 	char* last;
 	int not_found;
-	struct misra_err_out* misr_err;
+	tmisra_err_out* misr_err;
 	rule = 0;
 	subrule = 0;
 	misraoldrule = 0;
@@ -289,9 +290,9 @@ void warn(char *p)
     return;
   }else err_out[i].flags&=~DONTWARN;
 }
-void gen_function(FILE *f,struct Var *v,int real_gen)
+void gen_function(FILE *f,Var *v,int real_gen)
 {
-  struct IC *p,*new;int i,had_regs;
+  IC *p,*new;int i,had_regs;
   if(DEBUG&1) printf("gen_function <%s>,f=%p,real_gen=%d\n",v->identifier,(void*)f,real_gen);
   if(!v->fi) ierror(0);
   if(errors!=0) return;
@@ -360,7 +361,7 @@ void gen_function(FILE *f,struct Var *v,int real_gen)
 #ifdef HAVE_REGS_MODIFIED
     if(!v->fi) v->fi=new_fi();
     {
-      int i;struct IC *p;
+      int i;IC *p;
       for(i=1;i<=MAXR;i++){
 	if(BTST(regs_modified,i)&&reg_pair(i,&rp)){
 	  BSET(regs_modified,rp.r1);
@@ -402,11 +403,11 @@ void gen_function(FILE *f,struct Var *v,int real_gen)
   }
 }
 /* handle functions in a const list before caller */
-static void do_clist_calls(struct const_list *cl)
+static void do_clist_calls(const_list *cl)
 {
   while(cl){
     if(cl->tree&&(cl->tree->o.flags&VARADR)){
-      struct Var *v=cl->tree->o.v;
+      Var *v=cl->tree->o.v;
       if(ISFUNC(v->vtyp->flags)){
 	if(DEBUG&1)
 	  printf(":: %s\n",v->identifier);
@@ -418,9 +419,9 @@ static void do_clist_calls(struct const_list *cl)
     cl=cl->next;
   }
 }
-void do_function(struct Var *v)
+void do_function(Var *v)
 {
-  int i;struct IC *p;
+  int i;IC *p;
   if((v->flags&(GENERATED|DEFINED))!=DEFINED) return;
   v->flags|=GENERATED;
   if(!v->fi) v->fi=new_fi();
@@ -444,9 +445,9 @@ void do_function(struct Var *v)
       do_function(p->z.v);
     /* indirect call, handle special case */
     if(p->code==CALL&&(p->q1.flags&(VAR|DREFOBJ))==(VAR|DREFOBJ)){
-      struct Var *v=p->q1.v;
+      Var *v=p->q1.v;
       if(v->storage_class==AUTO||v->storage_class==REGISTER){
-	struct IC *m=p->prev;struct Var *tmp=0;
+	IC *m=p->prev;Var *tmp=0;
 	while(m&&(m->code<LABEL||m->code>=BRA)){
 	  if(!tmp&&(m->z.flags&(VAR|DREFOBJ))==VAR&&m->z.v==v&&
 	     (m->q1.flags&(VAR|DREFOBJ))==(VAR|DREFOBJ))
@@ -602,7 +603,11 @@ int main(int argc,char *argv[])
   if(c_flags[46]&USEDFLAG) {short_push=1;}
   if(c_flags[47]&USEDFLAG) {default_unsigned=1;}
   if(c_flags[48]&USEDFLAG) {opencl=1;}
-
+  {
+    size_t hs=1000;
+    if(c_flags[53]&USEDFLAG) hs=c_flags_val[53].l;
+    if(hs!=0) hash_ext=new_hashtable(hs);
+  }
 
   if(wpo){
     cross_module=1;
@@ -745,6 +750,7 @@ int main(int argc,char *argv[])
       define_macro(&ls,"__nosidefx=__vattr(\"nosidefx()\")");
       define_macro(&ls,"__stack(x)=__vattr(__str(stack1(x)))");
       define_macro(&ls,"__stack2(x)=__vattr(__str(stack2(x)))");
+      define_macro(&ls,"__noinline=__vattr(\"noinline()\")");
       if(c99)
 	define_macro(&ls,"__STDC_VERSION__=199901L");
       misracheck=mcmerk;
@@ -768,8 +774,8 @@ int main(int argc,char *argv[])
   if(!cross_module){
     ierror(0);
   }else{
-    struct tunit *t;
-    struct Var *v,*sf;
+    tunit *t;
+    Var *v,*sf;
 #if HAVE_OSEK
 /* removed */
 /* removed */
@@ -1089,7 +1095,7 @@ void cpnum(char *m)
   }
   strcpy(m,ctok->name);
 }
-void copy_token(struct token *d,struct token *s)
+void copy_token(token *d,token *s)
 {
   size_t l;
   *d=*s;
@@ -1100,9 +1106,9 @@ void copy_token(struct token *d,struct token *s)
   }else
     d->name=0;
 }
-static struct token back_token;
+static token back_token;
 static int have_back_token;
-void push_token(struct token *t)
+void push_token(token *t)
 {
   static char back_name[MAXI+1];
   if(have_back_token) ierror(0);
@@ -1125,7 +1131,7 @@ void next_token(void)
   }
   if(input_wpo){
     int c;
-    static struct token wpo_tok;
+    static token wpo_tok;
     static size_t sz;
     char *p;size_t cs;
   
@@ -1225,7 +1231,7 @@ void next_token(void)
 char *pragma_cpbez(char *buff,char *s);
 /* calculate fi entries (regs_modifed,uses,changes,flags etc.) from
    attributes */
-void fi_from_attr(struct Var *v)
+void fi_from_attr(Var *v)
 {
   char *attr;
   attr=v->vattr;
@@ -1237,7 +1243,7 @@ void fi_from_attr(struct Var *v)
     if(!v->fi) v->fi=new_fi();
     v->fi->flags|=ALL_USES;
     v->fi->use_cnt++;
-    v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(struct varlist));
+    v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(varlist));
     v->fi->use_list[v->fi->use_cnt-1].v=0;
     v->fi->use_list[v->fi->use_cnt-1].flags=f;
   }
@@ -1249,13 +1255,13 @@ void fi_from_attr(struct Var *v)
     if(!v->fi) v->fi=new_fi();
     v->fi->flags|=ALL_MODS;
     v->fi->change_cnt++;
-    v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(struct varlist));
+    v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(varlist));
     v->fi->change_list[v->fi->change_cnt-1].v=0;
     v->fi->change_list[v->fi->change_cnt-1].flags=f;
   }
   attr=v->vattr;
   while(attr=strstr(attr,"varused(")){
-    struct Var *n;
+    Var *n;
     attr+=8;
     if(!v->fi) v->fi=new_fi();
     v->fi->flags|=ALL_USES;
@@ -1273,7 +1279,7 @@ void fi_from_attr(struct Var *v)
 	break;
       }
       v->fi->use_cnt++;
-      v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(struct varlist));
+      v->fi->use_list=myrealloc(v->fi->use_list,v->fi->use_cnt*sizeof(varlist));
       v->fi->use_list[v->fi->use_cnt-1].v=n;
       v->fi->use_list[v->fi->use_cnt-1].flags=n->vtyp->flags;
       while(isspace((unsigned char)*attr)) attr++;
@@ -1282,7 +1288,7 @@ void fi_from_attr(struct Var *v)
   }
   attr=v->vattr;
   while(attr=strstr(attr,"varchanged(")){
-    struct Var *n;
+    Var *n;
     attr+=11;
     if(!v->fi) v->fi=new_fi();
     v->fi->flags|=ALL_MODS;
@@ -1300,7 +1306,7 @@ void fi_from_attr(struct Var *v)
 	break;
       }
       v->fi->change_cnt++;
-      v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(struct varlist));
+      v->fi->change_list=myrealloc(v->fi->change_list,v->fi->change_cnt*sizeof(varlist));
       v->fi->change_list[v->fi->change_cnt-1].v=n;
       v->fi->change_list[v->fi->change_cnt-1].flags=n->vtyp->flags;
       while(isspace((unsigned char)*attr)) attr++;
@@ -1362,16 +1368,20 @@ void fi_from_attr(struct Var *v)
   if(strstr(v->vattr,"nosidefx()")){
     if(!v->fi) v->fi=new_fi();
     v->fi->flags|=NOSIDEFX;
-  }  
+  }
+  if(strstr(v->vattr,"noinline()")){
+    if(!v->fi) v->fi=new_fi();
+    v->fi->flags|=NO_INLINE;
+  }
 }
 #define pragma_killsp() while(isspace((unsigned char)*s)) s++;
 char *pragma_cpbez(char *buff,char *s)
 {
   int cnt=0;
-  if(isalpha((unsigned char)*s)){
+  if(*s=='_'||isalpha((unsigned char)*s)){
     *buff++=*s++;
     cnt++;
-    while(cnt<MAXI-1&&isalnum((unsigned char)*s)){
+    while(cnt<MAXI-1&&(*s=='_'||isalnum((unsigned char)*s))){
       *buff++=*s++;
       cnt++;
     }
@@ -1422,14 +1432,14 @@ void do_pragma(char *s)
   }else if(!strncmp("end_header",s,10)){
     header_cnt--;
   }else if(!strncmp("pfi",s,3)){
-    struct Var *v;
+    Var *v;
     s+=3;pragma_killsp();
     pragma_cpbez(buff,s);
     if(DEBUG&1) printf("print function_info %s\n",buff);
     v=find_var(buff,0);
     if(v&&v->fi) print_fi(stdout,v->fi);
   }else if(!strncmp("finfo",s,5)){
-    struct Var *v;
+    Var *v;
     s+=5;pragma_killsp();
     pragma_cpbez(buff,s);
     if(DEBUG&1) printf("new function_info %s\n",buff);
@@ -1445,7 +1455,7 @@ void do_pragma(char *s)
     if(DEBUG&1) printf("fi_flags %lu\n",flags);
     if(current_fi) current_fi->flags=flags;
   }else if(!strncmp("fi_uses",s,7)){
-    int t;struct Var *v;
+    int t;Var *v;
     s+=7;pragma_killsp();
     s=pragma_cpbez(buff,s);
     t=nesting;nesting=0;
@@ -1455,12 +1465,12 @@ void do_pragma(char *s)
     if(DEBUG&1) printf("new fi_use %s,%d\n",buff,t);
     if(current_fi){
       current_fi->use_cnt++;
-      current_fi->use_list=myrealloc(current_fi->use_list,current_fi->use_cnt*sizeof(struct varlist));
+      current_fi->use_list=myrealloc(current_fi->use_list,current_fi->use_cnt*sizeof(varlist));
       current_fi->use_list[current_fi->use_cnt-1].v=v;
       current_fi->use_list[current_fi->use_cnt-1].flags=t;
     }
   }else if(!strncmp("fi_changes",s,10)){
-    int t;struct Var *v;
+    int t;Var *v;
     s+=10;pragma_killsp();
     s=pragma_cpbez(buff,s);
     t=nesting;nesting=0;
@@ -1470,12 +1480,12 @@ void do_pragma(char *s)
     if(DEBUG&1) printf("new fi_change %s,%d\n",buff,t);
     if(current_fi){
       current_fi->change_cnt++;
-      current_fi->change_list=myrealloc(current_fi->change_list,current_fi->change_cnt*sizeof(struct varlist));
+      current_fi->change_list=myrealloc(current_fi->change_list,current_fi->change_cnt*sizeof(varlist));
       current_fi->change_list[current_fi->change_cnt-1].v=v;
       current_fi->change_list[current_fi->change_cnt-1].flags=t;
     }
   }else if(!strncmp("fi_calls",s,8)){
-    int t;struct Var *v;
+    int t;Var *v;
     s+=8;pragma_killsp();
     s=pragma_cpbez(buff,s);
     t=nesting;nesting=0;
@@ -1485,7 +1495,7 @@ void do_pragma(char *s)
     if(DEBUG&1) printf("new fi_call %s,%d\n",buff,t);
     if(current_fi){
       current_fi->call_cnt++;
-      current_fi->call_list=myrealloc(current_fi->call_list,current_fi->call_cnt*sizeof(struct varlist));
+      current_fi->call_list=myrealloc(current_fi->call_list,current_fi->call_cnt*sizeof(varlist));
       current_fi->call_list[current_fi->call_cnt-1].v=v;
       current_fi->call_list[current_fi->call_cnt-1].flags=t;
     }
@@ -1498,7 +1508,7 @@ void do_pragma(char *s)
     if(r<=MAXR&&current_fi)
       BSET(current_fi->regs_modified,r);
   }else if(!strncmp("printflike",s,10)){
-    struct Var *v;
+    Var *v;
     s+=10;pragma_killsp();
     pragma_cpbez(buff,s);
     if(DEBUG&1) printf("printflike %s\n",buff);
@@ -1508,7 +1518,7 @@ void do_pragma(char *s)
       if(DEBUG&1) printf("succeeded\n");
     }
   }else if(!strncmp("scanflike",s,9)){
-    struct Var *v;
+    Var *v;
     s+=9;pragma_killsp();
     pragma_cpbez(buff,s);
     if(DEBUG&1) printf("scanflike %s\n",buff);
@@ -1704,7 +1714,6 @@ void leave_block(void)
       /*  spaetere struct, dieselbe Adresse bekommt und dadurch gleich wird.      */
       /*  Nicht sehr schoen - wenn moeglich noch mal aendern.                     */
       if(first_si[0]) free_si(first_si[0]);
-      if(merk_sdf) free_sd(merk_sdf);
       if(first_ext)
 	gen_vars(first_ext);
       if(first_var[0])
@@ -1713,6 +1722,7 @@ void leave_block(void)
 	free_var(first_ext);
       if(first_var[0])
 	free_var(first_var[0]);
+      if(merk_sdf) free_sd(merk_sdf);
       if(first_sd[0]) free_sd(first_sd[0]);
       if(first_ilist[0]) free_ilist(first_ilist[0]);
     }
@@ -1720,7 +1730,7 @@ void leave_block(void)
   nesting--;
   inleave=0;
 }
-void pra(FILE *f,struct argument_list *p)
+void pra(FILE *f,argument_list *p)
 /*  Gibt argument_list umgekehrt auf Bildschirm aus             */
 {
     if(p->next){ pra(f,p->next);fprintf(f,",");}
@@ -1808,7 +1818,7 @@ void do_error(int errn,va_list vl)
     fprintf(stderr,"\n");
     if(have_stack&&(!(c_flags[49]&USEDFLAG))){
       int i;
-      struct stack_context *sc = report_context();
+      stack_context *sc = report_context();
       for(i=0;;i++){
 	if(sc[i].line==-1) break;
 	fprintf(stderr,"\tincluded from file \"%s\":%ld\n",sc[i].long_name?sc[i].long_name:sc[i].name,sc[i].line);
@@ -1877,7 +1887,7 @@ void misra(int n,...)
 
 void misra_error(int n, int rule, int subrule, int line, ...) {
 	va_list vl;
-	struct misra_err_out* misr_err;
+	tmisra_err_out* misr_err;
 	char* mis_vers_string;
 	char mis_numb_string[100];
 	char* rule_text;

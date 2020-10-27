@@ -1,4 +1,4 @@
-/*  $VER: vbcc (parse_expr.c) V0.8  */
+/*  $VER: vbcc (parse_expr.c) $Revision: 1.16 $  */
 
 #include "vbcc_cpp.h"
 #include "vbc.h"
@@ -362,7 +362,7 @@ np cast_expression(void)
     killsp();
     if(new->cl){
       if(ISARRAY(new->ntyp->flags)&&zmeqto(new->ntyp->size,l2zm(0L))){
-	struct const_list *p=new->cl;
+	const_list *p=new->cl;
 	while(p){new->ntyp->size=zmadd(p->idx,l2zm(1L));p=p->next;}
       }
     }
@@ -411,7 +411,7 @@ np unary_expression(void)
       new->left=0;
       
       if(ctok->type==LPAR&&declaration(1)){
-	struct Typ *t;
+	type *t;
 	next_token();killsp();
 	buff[0]=0;
 	merk=ident;ident=buff;
@@ -461,7 +461,7 @@ np unary_expression(void)
 	if(op==OFFSETOF) error(0);
 	killsp();
 	tree=unary_expression();
-	if(!tree||!type_expression(tree)){
+	if(!tree||!type_expression(tree,0)){
 	  if(op==SIZEOF){
 	    if(HAVE_INT_SIZET)
 	      new->val.vuint=zum2zui(ul2zum(0UL));
@@ -584,7 +584,7 @@ np postfix_expression(void)
       new->flags=DSTRUCT;
       new->right->flags=MEMBER;
     }else if(ctok->type==LPAR){
-      struct argument_list *al,*first_alist=0,*last_alist=0;np n;
+      argument_list *al,*first_alist=0,*last_alist=0;np n;
 #ifdef HAVE_MISRA
 /* removed */
 /* removed */
@@ -613,15 +613,15 @@ np postfix_expression(void)
   }
   return left;
 }
-struct argument_list *argument_list_expression(void)
+argument_list *argument_list_expression(void)
 /* returns CALL node with alist attached, but without identifier */
 {
-  struct argument_list *al,*first_alist=0,*last_alist=0;np n;
+  argument_list *al,*first_alist=0,*last_alist=0;np n;
   if(ctok->type!=LPAR)ierror(0);
   next_token();killsp();
   while(ctok->type!=RPAR){
     n=assignment_expression();
-    al=mymalloc(sizeof(struct argument_list));
+    al=mymalloc(sizeof(argument_list));
     al->arg=n;al->next=0;
     if(last_alist){
       last_alist->next=al;
@@ -641,7 +641,7 @@ struct argument_list *argument_list_expression(void)
 np primary_expression(void)
 /*  primary-expressions (Konstanten,Strings,(expr),Identifier)  */
 {
-  np new;struct token mtok;
+  np new;token mtok;
   if(ctok->type==NUMBER) return constant_expression();
   if(ctok->type==T_STRING||ctok->type==T_CHAR) return string_expression();
   if(ctok->type==LPAR){
@@ -654,9 +654,9 @@ np primary_expression(void)
   return identifier_expression();
 }
 
-struct const_list *cl_from_string(char *start, char *end)
+const_list *cl_from_string(char *start, char *end)
 {
-  struct const_list *r,*cl,**prev;int i;
+  const_list *r,*cl,**prev;int i;
   prev=&r;
   for(i=0;i<end-start+1;i++){
     cl=mymalloc(CLS);
@@ -1008,10 +1008,10 @@ np identifier_expression(void)
   }
   return new;
 }
-void free_alist(struct argument_list *p)
+void free_alist(argument_list *p)
 /*  Gibt argument_list inkl. expressions frei  */
 {
-  struct argument_list *merk;
+  argument_list *merk;
   while(p){
     merk=p->next;
     if(p->arg) free_expression(p->arg);

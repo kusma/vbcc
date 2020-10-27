@@ -1,4 +1,4 @@
-/*  $VER: vbcc (regs.c) V0.8    */
+/*  $VER: vbcc (regs.c) $Revision: 1.10 $   */
 /*  Registerzuteilung           */
 
 #include "opt.h"
@@ -12,11 +12,13 @@ int *rvlist;
 
 static int const_vars;
 
-struct regp {int treg;struct Var *tvar,*tmp;};
-void do_load_parms(struct regp [],struct flowgraph *);
-void load_one_parm(int,int,struct Var *,struct Var *,struct flowgraph *);
+typedef struct regp {int treg;Var *tvar,*tmp;} regp;
+void do_load_parms(regp [],flowgraph *);
+void load_one_parm(int,int,Var *,Var *,flowgraph *);
 
-static void insert_cobj(struct obj *o,struct obj *co);
+Var *lparms[MAXR+1];
+
+static void insert_cobj(obj *o,obj *co);
 
 #ifndef HAVE_TARGET_RALLOC
 int reg_prio[MAXR+1];
@@ -25,7 +27,7 @@ int reg_prio[MAXR+1];
 #define cost_save_reg(x,y) 2
 #define cost_pushpop_reg(x) 4
 
-int cost_savings(struct IC *p,int r,struct obj *o)
+int cost_savings(IC *p,int r,obj *o)
 {
   int c=p->code;
   if(o->flags&VKONST) return 0;
@@ -51,11 +53,11 @@ int cmp_savings(const void *v1,const void *v2)
 {
     return savings[*(int *)v2][0]-savings[*(int *)v1][0];
 }
-int entry_load(struct flowgraph *fg,int i)
+int entry_load(flowgraph *fg,int i)
 /*  Testet, ob die Variable in Register i am Anfang von Block fg geladen    */
 /*  werden muss, d.h. ein Vorgaenger sie nicht im selben Register hat.      */
 {
-    struct flowlist *lp;
+    flowlist *lp;
     lp=fg->in;
     while(lp){
         if(lp->graph&&lp->graph->regv[i]!=fg->regv[i]&&(fg->regv[i]->index>=vcount-rcount||BTST(lp->graph->av_out,fg->regv[i]->index))) return 1;
@@ -67,11 +69,11 @@ int entry_load(struct flowgraph *fg,int i)
 /* checks if variable i can be held in a register in loop start-end */
 /* currently we check whether an IC uses/modifies the variable and */
 /* has a corresponding drefobj which might alias the variable */
-int check_cacheable(int i,struct flowgraph *start,struct flowgraph *end)
+int check_cacheable(int i,flowgraph *start,flowgraph *end)
 {
   int j,k;
-  struct IC *p;struct Var *v;
-  struct flowgraph *g;
+  IC *p;Var *v;
+  flowgraph *g;
   /* constants are always cacheable */
   if(vilist[i]->identifier[0]==' ')
     return 1;
@@ -105,12 +107,12 @@ int check_cacheable(int i,struct flowgraph *start,struct flowgraph *end)
   /*printf("assigned static %s to reg\n",vilist[i]->identifier);*/
   return 1;
 }
-int exit_save(struct flowgraph *fg,int i)
+int exit_save(flowgraph *fg,int i)
 /*  Testet, ob die Variable in Register i am Ende von Block fg gespeichert  */
 /*  werden muss, d.h. der Vorgaenger eines Nachfolgers nicht dieselbe       */
 /*  Variable im selben Register hat.                                        */
 {
-    struct flowlist *lp;
+    flowlist *lp;
     /* Konstanten muessen nie gespeichert werden */
     if(fg->regv[i]->index>=vcount-rcount) return 0;
     if(!fg->normalout){
@@ -136,27 +138,27 @@ int exit_save(struct flowgraph *fg,int i)
     }
     return 0;
 }
-void load_reg_parms(struct flowgraph *fg)
+void load_reg_parms(flowgraph *fg)
 /*  Laedt Registerparameter, falls noetig.                              */
 {
-    int i,j; struct Var *v;
-    struct regp regp[MAXR+1]={0};
+    int i,j; Var *v;
+    regp regp[MAXR+1]={0};
 /*     for(i=1;i<=MAXR;i++){ regp[i].treg=0;regp[i].tvar=0;} */
     for(i=0;i<vcount-rcount;i++){
         v=vilist[i];
         if((v->flags&REGPARM)&&(fg->regv[abs(v->reg)]!=v||(v->flags&CONVPARAMETER))&&(BTST(fg->av_in,i)||(v->flags&USEDASADR))){
 	  regp[abs(v->reg)].tvar=v;
 	  for(j=1;j<=MAXR;j++)
-	    if(fg->regv[j]==v) regp[abs(v->reg)].treg=j;
+	    if(fg->regv[j]==v||lparms[j]==v) regp[abs(v->reg)].treg=j;
 	}
     }
     do_load_parms(regp,fg);
 }
 
-void insert_regs(struct flowgraph *fg1)
+void insert_regs(flowgraph *fg1)
 /*  Fuegt Registervariablen in die ICs ein.                             */
 {
-    int i;struct IC *p,*lic=0,*new;struct flowgraph *lfg=0,*fg;
+    int i;IC *p,*lic=0,*new;flowgraph *lfg=0,*fg;
     if(DEBUG&9216) printf("inserting register variables\n");
     fg=fg1;
     while(fg){
@@ -211,7 +213,7 @@ void insert_regs(struct flowgraph *fg1)
                 if(fg->regv[i]->index<vcount-rcount&&BTST(fg->av_out,fg->regv[i]->index)){
                 /*  Variable beim Austritt aktiv?   */
                     if(exit_save(fg,i)){
-                        struct IC *tp;
+                        IC *tp;
                         if(DEBUG&8192) printf("\thave to save it at end of block\n");
                         new=new_IC();
                         new->line=0;
@@ -303,14 +305,14 @@ void insert_regs(struct flowgraph *fg1)
     load_reg_parms(fg1);
 }
 
-void do_loop_regs(struct flowgraph *start,struct flowgraph *end,int intask)
+void do_loop_regs(flowgraph *start,flowgraph *end,int intask)
 /*  Macht die Variablenzuweisung in Schleife start-end.                 */
 /*  Wenn end==0 Registerzuweisung fuer die ganze Funktion, ansonsten    */
 /*  fuer die Schleife, die zum Header start gehoert.                    */
 {
-  struct flowgraph *g,*lend;
+  flowgraph *g,*lend;
   int i,r,iterations;
-  struct Var *lregs[MAXR+1]={0};
+  Var *lregs[MAXR+1]={0};
   unsigned char regu[MAXR+1]={0};
   bvtype *isused=mymalloc(vsize);
   /*  Berechnen, wieviel ungefaehr eingespart wird, wenn eine Variable    */
@@ -331,7 +333,7 @@ void do_loop_regs(struct flowgraph *start,struct flowgraph *end,int intask)
     }
   }
   if(end){
-    struct Var *v;
+    Var *v;
     /* estimated number of iterations, avoid too big values */
     if(optsize)
       iterations=1;
@@ -419,7 +421,7 @@ void do_loop_regs(struct flowgraph *start,struct flowgraph *end,int intask)
 
   lend=0;
   for(;g;g=g->normalout){
-    struct IC *p;struct Var *v;
+    IC *p;Var *v;
     int t,vt;
     if(!end&&!lend){
       lend=g->loopend;
@@ -536,7 +538,7 @@ void do_loop_regs(struct flowgraph *start,struct flowgraph *end,int intask)
   }
   /*  Maximum ermitteln   */
   for(i=0;i<vcount-rcount+const_vars;i++){
-    int m=0,t;struct Var *v;
+    int m=0,t;Var *v;
     v=vilist[i];t=v->vtyp->flags;
     if(ISARRAY(t)&&is_vlength(v->vtyp))
       t=POINTER_TYPE(v->vtyp->next);
@@ -610,10 +612,10 @@ void do_loop_regs(struct flowgraph *start,struct flowgraph *end,int intask)
     if(end&&g==end->normalout) break;
   }
 }
-void block_regs(struct flowgraph *fg)
+void block_regs(flowgraph *fg)
 /*  macht die Variablenzuweisung fuer einzelne Bloecke  */
 {
-    struct flowgraph *g,**fgp;
+    flowgraph *g,**fgp;
     int i,r,changed,fgz;
     if(DEBUG&9216) printf("block_regs\n");
 
@@ -633,7 +635,7 @@ void block_regs(struct flowgraph *fg)
         changed=0;
         if(DEBUG&9216) printf("block_regs pass\n");
         for(fgz=basic_blocks-1;fgz>=0;fgz--){
-            struct IC *p;struct Var *v;struct flowlist *lp;
+            IC *p;Var *v;flowlist *lp;
             int t,vt;
             g=fgp[fgz];
             if(DEBUG&8192) printf("assigning regs to block %d\n",g->index);
@@ -739,7 +741,7 @@ void block_regs(struct flowgraph *fg)
                 if(g->regv[r]||BTST(g->regused,r)) continue;
                 for(i=0;i<vcount-rcount;i++){
                     if(savings[i][r]>0){
-                        int flag;struct Var *v=vilist[i];
+                        int flag;Var *v=vilist[i];
                         /*  Variable schon in anderem Register? */
                         for(flag=1;flag<=MAXR;flag++)
                             if(g->regv[flag]==v){flag=-1;break;}
@@ -763,10 +765,10 @@ void block_regs(struct flowgraph *fg)
     free(savings);
 }
 
-void loop_regs(struct flowgraph *fg,int intask)
+void loop_regs(flowgraph *fg,int intask)
 /*  weist Variablen in Schleifen Register zu    */
 {
-    struct flowgraph *g;
+    flowgraph *g;
     if(disable&4096) return;
     if(DEBUG&9216) printf("assigning regs to function\n");
     savings=mymalloc((vcount-rcount+const_vars)*sizeof(*savings));
@@ -779,11 +781,11 @@ void loop_regs(struct flowgraph *fg,int intask)
     free(rvlist);
     free(savings);
 }
-void insert_allocreg(struct flowgraph *fg,struct IC *p,int code,int reg)
+void insert_allocreg(flowgraph *fg,IC *p,int code,int reg)
 /*  Fuegt ein ALLOCREG/FREEREG (in code) hinter p ein - bei p==0 in */
 /*  first_ic.                                                       */
 {
-    struct IC *new=new_IC();
+    IC *new=new_IC();
     /*    printf("%s %s",code==FREEREG?"freereg":"allocreg",regnames[reg]);pric2(stdout,p);*/
     new->line=0;
     new->file=0;
@@ -805,11 +807,12 @@ void insert_allocreg(struct flowgraph *fg,struct IC *p,int code,int reg)
     insert_IC_fg(fg,p,new);
 }
 
-struct Var *lregv[MAXR+1],*first_const,*last_const;
-struct flowgraph *lfg;
+Var *lregv[MAXR+1],*first_const,*last_const;
+flowgraph *lfg;
+static int is_header;
 
 /* re-inserts a cobj into an obj */
-static void insert_cobj(struct obj *o,struct obj *co)
+static void insert_cobj(obj *o,obj *co)
 {
   int dt=o->dtyp,df=o->flags&DREFOBJ;
   *o=*co;
@@ -817,9 +820,9 @@ static void insert_cobj(struct obj *o,struct obj *co)
   o->dtyp=dt;
 }
 
-static struct Var *find_const_var(struct obj *o,int t)
+static Var *find_const_var(obj *o,int t)
 {
-  struct Var *v;
+  Var *v;
   for(v=first_const;v;v=v->next){
     if((v->ctyp&NQ)==(t&NQ)&&!compare_objs(o,&v->cobj,t))
       return v;
@@ -829,10 +832,10 @@ static struct Var *find_const_var(struct obj *o,int t)
 
 static long cidx;
 
-static struct Var *add_const_var(struct obj *o,int t)
+static Var *add_const_var(obj *o,int t)
 {
-  struct Var *v;
-  static struct Typ vt={VOID},tt;
+  Var *v;
+  static type vt={VOID},tt;
   int m=o->flags;
   if(o->flags&DREFOBJ){
     t=o->dtyp;
@@ -872,10 +875,10 @@ static struct Var *add_const_var(struct obj *o,int t)
   return v;
 }
 
-void create_const_vars(struct flowgraph *fg)
+void create_const_vars(flowgraph *fg)
 {
-  struct IC *p;int t;
-  struct Var *v;
+  IC *p;int t;
+  Var *v;
   if(DEBUG&1024) printf("creating const-vars\n");
   cidx=0;
   const_vars=0;
@@ -910,7 +913,7 @@ void create_const_vars(struct flowgraph *fg)
     }
   }
   if(DEBUG&1024){
-    struct Var *v;
+    Var *v;
     printf("const-vars:\n");
     for(v=first_const;v;v=v->next){
       printf("%d: ",v->index);
@@ -922,7 +925,7 @@ void create_const_vars(struct flowgraph *fg)
 
 void free_const_vars(void)
 {
-  struct Var *v,*m;
+  Var *v,*m;
   if(DEBUG&1024) printf("free_const_vars()\n");
   for(v=first_const;v;){
     m=v->next;
@@ -932,12 +935,12 @@ void free_const_vars(void)
 }
 
 #if 0
-int free_hreg(struct flowgraph *fg,struct IC *p,int reg,int mustr)
+int free_hreg(flowgraph *fg,IC *p,int reg,int mustr)
 /*  Macht das Register reg frei, damit es als lokale Variable im IC p   */
 /*  zur Verfuegung steht. Wenn mustr!=0, muss das Register unbedingt    */
 /*  freigemacht werden, ansonsten kann davon abgesehen werden.          */
 {
-    struct IC *m,*first;struct Var *v;
+    IC *m,*first;Var *v;
     int preg[MAXR+1]={0},calls[MAXR+1]={0},rreg,i;
     first=0;
     v=lregv[reg];
@@ -1020,13 +1023,13 @@ int free_hreg(struct flowgraph *fg,struct IC *p,int reg,int mustr)
     return rreg;
 }
 #endif
-int replace_local_reg(struct obj *o)
+int replace_local_reg(obj *o)
 /*  tested, ob o eine Scratch-Variable ist und ersetzt sie gegebenenfalls   */
 {
-    int i;struct Var *v;
+    int i;Var *v;
     if((o->flags&(VAR|REG|VARADR))==VAR){
         v=o->v;i=v->index;
-        if(BTST(lfg->av_kill,i)&&!BTST(lfg->av_out,i)){
+        if((BTST(lfg->av_kill,i)||is_header)&&!BTST(lfg->av_out,i)){
             for(i=1;i<=MAXR;i++){
                 if(lregv[i]==v){
                     o->flags|=(REG|SCRATCH);
@@ -1039,12 +1042,12 @@ int replace_local_reg(struct obj *o)
     }
     return 0;
 }
-void local_combine(struct flowgraph *fg)
+void local_combine(flowgraph *fg)
 /*  Versucht, Zuweisungen der Form (x)->tmp in ein direkt folgendes IC */
 /*  einzugliedern. Nur einfache Tests, da nur loads eliminiert werden  */
 /*  sollen, die zum leichten Erkennen per cse explizit wurden.         */
 {
-  struct IC *p,*pprev;int i,cl;
+  IC *p,*pprev;int i,cl;
   bvtype *used=mymalloc(vsize);
   if(DEBUG&1024) printf("local combining\n");
   for(;fg;fg=fg->normalout){
@@ -1081,10 +1084,11 @@ void local_combine(struct flowgraph *fg)
       if((pprev)&&pprev->code==ASSIGN&&zmeqto(pprev->q2.val.vmax,sizetab[pprev->typf&NQ])
 	 &&zmeqto(pprev->q2.val.vmax,sizetab[p->typf&NQ])
 	 &&((pprev->q1.flags&DREFOBJ)||(static_cse&&(pprev->q1.flags&(VAR|VARADR))==VAR&&(pprev->q1.v->storage_class==EXTERN||pprev->q1.v->storage_class==STATIC)))&&(pprev->z.flags&(VAR|DREFOBJ))==VAR
-	 &&!BTST(used,(i=pprev->z.v->index))&&pprev->z.v->storage_class==AUTO
+	 &&!BTST(used,pprev->z.v->index)&&pprev->z.v->storage_class==AUTO
 	 &&!(pprev->z.v->flags&USEDASADR)
 	 &&((p->code!=ASSIGN&&p->code!=PUSH)||zmeqto(p->q2.val.vmax,sizetab[p->typf&NQ]))){
 	cl=0;
+	i=pprev->z.v->index;
 	if((p->z.flags&VAR)&&p->z.v->index==i) cl=4;
 	if((p->q1.flags&(VAR|DREFOBJ))==VAR){
 	  if(p->q1.v->index==i&&zmeqto(p->q1.val.vmax,pprev->z.val.vmax))
@@ -1126,10 +1130,10 @@ void local_combine(struct flowgraph *fg)
 
 /* Fuegt evtl. noetige allocreg/freereg nach local_regs in Block ein. */
 /* Kann durch free_hreg noetig werden. */
-void fix_local_allocreg(struct flowgraph *fg)
+void fix_local_allocreg(flowgraph *fg)
 {
   char regs[MAXR+1]={0};
-  struct IC *p=fg->end;
+  IC *p=fg->end;
   while(p){
     if(p->code==ALLOCREG){
       if(!regs[p->q1.reg]) ierror(0);
@@ -1155,7 +1159,7 @@ void fix_local_allocreg(struct flowgraph *fg)
       if((p->z.flags&(REG|DREFOBJ))==REG){
 	if(!(p->q1.flags&REG)||p->q1.reg!=p->z.reg){
 	  if(!(p->q2.flags&REG)||p->q2.reg!=p->z.reg){
-	    struct IC *p2;
+	    IC *p2;
 	    for(p2=p->prev;p2;p2=p2->prev){
 	      if(p2->code==ALLOCREG&&p2->q1.reg==p->z.reg) break;
 	      if(p2->code!=ALLOCREG&&p2->code!=FREEREG) break;
@@ -1175,10 +1179,10 @@ void fix_local_allocreg(struct flowgraph *fg)
 /* searches back to determine the best local register for v 
    register-pairs must not be alive in the same instruction as
    one of the halves */
-int find_best_local_reg(struct IC *fp,struct Var *v,int preferred)
+int find_best_local_reg(IC *fp,Var *v,int preferred)
 {
   int r,used,tmp,savings[MAXR+1]={0};
-  struct IC *p=fp;
+  IC *p=fp;
   if(v->reg&&!*v->identifier)
     return abs(v->reg);
   if(v->vtyp->flags&VOLATILE)
@@ -1212,6 +1216,10 @@ int find_best_local_reg(struct IC *fp,struct Var *v,int preferred)
     }
   }
   while(1){
+    if(!p){
+      if(!is_header) ierror(0);
+      break;
+    }
     if(!p||(p!=fp&&p->code>=LABEL&&p->code<=BRA)) return 0;
     if(p!=fp){
       if((p->z.flags&VAR)&&p->z.v->reg&&!*p->z.v->identifier){
@@ -1280,10 +1288,14 @@ int find_best_local_reg(struct IC *fp,struct Var *v,int preferred)
 
     /* check for register arguments */
     if((p->z.flags&(VAR|DREFOBJ))==VAR&&!*p->z.v->identifier&&p->z.v->reg){
-      savings[abs(p->z.v->reg)]=INT_MIN;
-      if(reg_pair(abs(p->z.v->reg),&rp)){
-	savings[rp.r1]=INT_MIN;
-	savings[rp.r2]=INT_MIN;
+      if(p->code==ASSIGN&&(p->q1.flags&(VAR|DREFOBJ))==VAR&&p->q1.v==v){
+	savings[p->z.v->reg]++;
+      }else{
+	savings[abs(p->z.v->reg)]=INT_MIN;
+	if(reg_pair(abs(p->z.v->reg),&rp)){
+	  savings[rp.r1]=INT_MIN;
+	  savings[rp.r2]=INT_MIN;
+	}
       }
     }
 
@@ -1297,21 +1309,23 @@ int find_best_local_reg(struct IC *fp,struct Var *v,int preferred)
   }
   return r;
 }
-void local_regs(struct flowgraph *fg)
+void local_regs(flowgraph *fg)
 /*  versucht Variablen, die nur innerhalb eines Basic Blocks benutzt    */
 /*  werden (kill==true und out==false), Register zuzuweisen.            */
 {
-  struct IC *p;
+  IC *p;
   int i,j,t,r,nr,mustalloc,savings,prio,nr1,nr2;
   bvtype *inmem=mymalloc(vsize);
   if(DEBUG&9216) printf("assigning temporary variables to registers\n");
   memset(inmem,0,vsize);
+  for(i=0;i<=MAXR;i++) lparms[i]=0;
   lfg=fg;
   while(lfg){
     if(DEBUG&1024) printf("block %d\n",lfg->index);
     for(i=1;i<=MAXR;i++){lregv[i]=0; regu[i]=regsa[i]; lfg->regv[i]=0;}
     memset(&lfg->regused,0,RSIZE);
     lfg->calls=0;
+    //    if(lfg==fg&&!lfg->in) is_header=1; else is_header=0;
     p=lfg->end;
     while(p){
       nr=nr1=nr2=0;
@@ -1338,7 +1352,7 @@ void local_regs(struct flowgraph *fg)
       /*  angeordnet werden, dass ein evtl. Register rechts steht     */
       if((p->q2.flags&(VAR|REG|VARADR))==VAR&&!(p->q2.v->flags&USEDASADR)&&!(p->q2.v->vtyp->flags&VOLATILE)&&(p->q2.v->storage_class==AUTO||p->q2.v->storage_class==REGISTER)){
 	j=p->q2.v->index;
-	if(BTST(lfg->av_kill,j)&&!BTST(lfg->av_out,j)&&!BTST(inmem,j)){
+	if((BTST(lfg->av_kill,j)||is_header)&&!BTST(lfg->av_out,j)&&!BTST(inmem,j)){
 	  r=find_best_local_reg(p,p->q2.v,nr);
 	  if(r){
 	    if(r!=nr) insert_allocreg(lfg,p,FREEREG,r);
@@ -1358,7 +1372,7 @@ void local_regs(struct flowgraph *fg)
       }
       if((p->z.flags&(VAR|REG|DREFOBJ))==(VAR|DREFOBJ)&&!(p->z.v->flags&USEDASADR)&&!(p->z.v->vtyp->flags&VOLATILE)&&(p->z.v->storage_class==AUTO||p->z.v->storage_class==REGISTER)){
 	j=p->z.v->index;
-	if(BTST(lfg->av_kill,j)&&!BTST(lfg->av_out,j)&&!BTST(inmem,j)){
+	if((BTST(lfg->av_kill,j)||is_header)&&!BTST(lfg->av_out,j)&&!BTST(inmem,j)){
 	  r=find_best_local_reg(p,p->z.v,nr);
 	  if(r){
 	    insert_allocreg(lfg,p,FREEREG,r);
@@ -1378,7 +1392,7 @@ void local_regs(struct flowgraph *fg)
       }
       if((p->q1.flags&(VAR|REG|VARADR))==VAR&&!(p->q1.v->flags&USEDASADR)&&(!(p->q1.v->vtyp->flags&VOLATILE)||p->q1.v->reg)&&(p->q1.v->storage_class==AUTO||p->q1.v->storage_class==REGISTER)){
 	j=p->q1.v->index;
-	if(BTST(lfg->av_kill,j)&&!BTST(lfg->av_out,j)&&!BTST(inmem,j)){
+	if((BTST(lfg->av_kill,j)||is_header)&&!BTST(lfg->av_out,j)&&!BTST(inmem,j)){
 	  r=find_best_local_reg(p,p->q1.v,nr);
 	  if(r){
 	    if(r!=nr) 
@@ -1433,13 +1447,17 @@ void local_regs(struct flowgraph *fg)
     }
     fix_local_allocreg(lfg);
     lfg=lfg->normalout;
+    if(is_header){
+      for(i=1;i<=MAXR;i++)
+	lparms[i]=lregv[i];
+    }
   }
   free(inmem);
 }
-void insert_saves(struct flowgraph *fg)
+void insert_saves(flowgraph *fg)
 /*  fuegt speichern von Registern bei Funktionsaufrufen ein */
 {
-  int r,c,i;struct IC *p,*new,*n,*before,*after;struct Var *v;
+  int r,c,i;IC *p,*new,*n,*before,*after;Var *v;
   bvtype *isused=mymalloc(vsize);
   if(DEBUG&9216) printf("insert_saves\n");
   for(;fg;fg=fg->normalout){
@@ -1532,6 +1550,8 @@ void insert_saves(struct flowgraph *fg)
 	    }
 	  }
 	}
+	if(p->change_cnt!=0||p->use_cnt!=0)
+	  av_update(p,isused);
 	p=n;
 	continue;
       }
@@ -1547,11 +1567,11 @@ void insert_saves(struct flowgraph *fg)
 
 #endif
 
-void insert_simple_allocreg(struct IC *p,int code,int reg)
+void insert_simple_allocreg(IC *p,int code,int reg)
 /*  Fuegt ein ALLOCREG/FREEREG (in code) hinter p ein - bei p==0 in */
 /*  first_ic.                                                       */
 {
-    struct IC *new=new_IC();
+    IC *new=new_IC();
     new->line=0;
     new->file=0;
     regused[reg]=1;
@@ -1571,8 +1591,8 @@ void insert_simple_allocreg(struct IC *p,int code,int reg)
 void load_simple_reg_parms(void)
 /*  Laedt Registerparameter, falls noetig. Nicht-optimierende Version.  */
 {
-  int i,j; struct Var *v;
-  struct regp regp[MAXR+1]={0};
+  int i,j; Var *v;
+  regp regp[MAXR+1]={0};
 /*   for(i=1;i<=MAXR;i++) {regp[i].treg=0;regp[i].tvar=0;} */
   for(i=0;i<=1;i++){
     if(i==0) v=vl3; else v=vl2;
@@ -1589,10 +1609,10 @@ void load_simple_reg_parms(void)
 
 extern zmax recalc_start_offset;
 
-void do_load_parms(struct regp regp[],struct flowgraph *fg)
+void do_load_parms(regp regp[],flowgraph *fg)
 {
   int i,i1,i2,j,j1,j2,c,k,notdone;
-  struct {int freg,treg;struct Var *tvar,*tmp;} order[MAXR]={0};
+  struct {int freg,treg;Var *tvar,*tmp;} order[MAXR]={0};
   if(DEBUG&1){
     printf("do_load_parms:\n");
     for(i=1;i<=MAXR;i++)
@@ -1651,7 +1671,7 @@ void do_load_parms(struct regp regp[],struct flowgraph *fg)
       }
     }
     if(i<=MAXR){
-      static struct Typ dtyp={DOUBLE};
+      static type dtyp={DOUBLE};
       if(!regp[i].tvar) ierror(0);
       if(regp[i].tvar->flags&CONVPARAMETER)
 	regp[i].tmp=add_tmp_var(clone_typ(&dtyp));
@@ -1670,9 +1690,9 @@ void do_load_parms(struct regp regp[],struct flowgraph *fg)
     }
   }while(notdone);
 }
-void load_one_parm(int freg,int treg,struct Var *fvar,struct Var *tvar,struct flowgraph *fg)
+void load_one_parm(int freg,int treg,Var *fvar,Var *tvar,flowgraph *fg)
 {
-  struct IC *new;
+  IC *new;
   if(DEBUG&1) printf("lop: %s(%s)->%s(%s)\n",regnames[freg],fvar?fvar->identifier:empty,regnames[treg],tvar?tvar->identifier:empty);
   if(freg&&freg!=treg){
     if(fg)
@@ -1725,7 +1745,7 @@ void load_one_parm(int freg,int treg,struct Var *fvar,struct Var *tvar,struct fl
   }
   if(new->z.flags&REG){
     /*  ALLOCREG verschieben    */
-    struct IC *p;
+    IC *p;
     if(fg)
       insert_allocreg(fg,0,ALLOCREG,treg);
     else
@@ -1746,8 +1766,8 @@ void load_one_parm(int freg,int treg,struct Var *fvar,struct Var *tvar,struct fl
 void simple_regs(void)
 /*  haelt Variablen in Registern, simple Version            */
 {
-  int i2,i,j;int pri;struct Var *v;
-  struct IC *icp,*start=first_ic;
+  int i2,i,j;int pri;Var *v;
+  IC *icp,*start=first_ic;
   if(!first_ic) return;
   for(i=1;i<=MAXR;i++) regsv[i]=0;
   for(i2=0;i2<=MAXR*4;i2++){
@@ -1839,7 +1859,7 @@ void simple_regs(void)
     if((icp->code==ALLOCREG||icp->code==FREEREG)&&regsv[icp->q1.reg]){
       /*  irgendwelche allocreg/freereg im Code entfernen     */
       /*  sollte nur beim Returnregister vorkommen            */
-      struct IC *m=icp->next;
+      IC *m=icp->next;
       remove_IC(icp);
       icp=m;continue;
     }

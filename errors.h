@@ -365,3 +365,4 @@
 "constant implicitly sign-changed",WARNING|DONTWARN,
 "constant implicitly truncated",WARNING,
 "hexadecimal escape sequence overflow",WARNING,
+"missing identifier",ERROR|FATAL|ANSIV,                            /* 365 */
